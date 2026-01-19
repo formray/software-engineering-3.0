@@ -1,0 +1,282 @@
+---
+title: "Engineering Guidelines: First Principles"
+description: "The principles behind building production-ready software. Not rules, but physics. Complexity has gravity - your job is to fight it."
+icon: "⚡"
+tag: "Engineering"
+date: 2026-01-19
+---
+
+import InfoBox from '../../components/InfoBox.astro';
+import Quote from '../../components/Quote.astro';
+import ComparisonTable from '../../components/ComparisonTable.astro';
+import StepHeader from '../../components/StepHeader.astro';
+import VersionBadge from '../../components/VersionBadge.astro';
+
+<VersionBadge version="January 2026" />
+
+---
+
+## The Problem
+
+<InfoBox type="highlight" title="The Truth">
+Most engineering problems aren't technical. They're organizational.
+
+Slow onboarding. Tribal knowledge. "It works on my machine." Configuration drift. Security as an afterthought.
+
+These kill velocity more than any algorithm ever will.
+</InfoBox>
+
+---
+
+## First Principle: Zero Friction
+
+If a new engineer can't ship code on day one, your process is broken.
+
+Not "read the wiki." Not "ask John, he knows how it works." Not "we'll pair with you for a week."
+
+**Clone. Run one command. Ship.**
+
+Everything else is organizational debt you're paying interest on every single day.
+
+```bash
+git clone <repo>
+cd project
+./setup.sh
+# Done. Ship code.
+```
+
+<InfoBox type="warning" title="The Test">
+If your setup has "prerequisites," you've already failed.
+</InfoBox>
+
+---
+
+## The Algorithm
+
+<StepHeader number={1} title="Question Every Requirement" />
+
+Each requirement has a person behind it. Find them. Ask why.
+
+The most dangerous requirements are the ones nobody questions because "that's how we've always done it."
+
+<StepHeader number={2} title="Delete What You Can" />
+
+The best code is no code. The best config is no config. The best process is no process.
+
+Before you optimize anything, ask: can I delete it instead?
+
+<StepHeader number={3} title="Simplify" />
+
+Only after you've deleted everything possible.
+
+Simplification without deletion is just rearranging complexity.
+
+<StepHeader number={4} title="Accelerate" />
+
+Speed up what remains.
+
+But only what remains after deletion and simplification.
+
+<StepHeader number={5} title="Automate" />
+
+Only at the end.
+
+**Most teams do this backwards. They automate complexity instead of eliminating it.**
+
+---
+
+## On Setup
+
+Your setup process reveals everything about your engineering culture.
+
+<ComparisonTable
+  leftTitle="What You Think"
+  rightTitle="What's Actually True"
+  leftColor="orange"
+  rightColor="green"
+  leftItems={[
+    "Complex setup = sophisticated system",
+    "Prerequisites are normal",
+    "Documentation fixes onboarding",
+    "Senior devs know how it works"
+  ]}
+  rightItems={[
+    "Complex setup = complex debugging",
+    "Prerequisites are failure",
+    "One command fixes onboarding",
+    "The system should be self-evident"
+  ]}
+/>
+
+The goal is one command that works everywhere. Mac. Linux. Docker. CI/CD. No exceptions.
+
+---
+
+## On Configuration
+
+Configuration is where projects go to die.
+
+Every config file is a decision someone didn't want to make. Every environment variable is complexity exported from code.
+
+<InfoBox type="info" title="The Rule">
+Ruthlessly minimize. Default to development. Override for production.
+
+That's it.
+</InfoBox>
+
+If you need a config management tool to manage your config, you have too much config.
+
+---
+
+## On State
+
+**State is the enemy of scale.**
+
+| If This | Then This |
+|---------|-----------|
+| Session in memory | Can't scale horizontally |
+| Files on disk | Can't distribute load |
+| Anything local | Single point of failure |
+
+The application should be disposable. Kill any instance. Nothing is lost.
+
+<InfoBox type="warning" title="The Test">
+If killing a random instance breaks your system, fix that before building anything else.
+</InfoBox>
+
+---
+
+## On Failure
+
+Every system fails. Plan for it.
+
+Not "what if it fails" but **"when it fails."**
+
+Graceful degradation isn't a feature. It's the default behavior. The system works with reduced capability, never zero capability.
+
+Circuit breakers. Fallbacks. Timeouts. These aren't optional. They're the architecture.
+
+<Quote author="First Principles">
+"Design for failure, and you'll rarely experience it. Design for success, and failure will surprise you."
+</Quote>
+
+---
+
+## On Security
+
+Security isn't a sprint at the end. It's how you build.
+
+Most security vulnerabilities are known and preventable. The same injection attacks from 2003 still work because teams still concatenate strings.
+
+**Don't add security. Build with security.** There's a difference.
+
+<InfoBox type="highlight" title="The Truth">
+If security slows you down, you're doing it wrong.
+
+Good security patterns accelerate development because you're not firefighting breaches.
+</InfoBox>
+
+---
+
+## On Observability
+
+**You can't fix what you can't see.**
+
+| What | Not | Why |
+|------|-----|-----|
+| Structured logs | Text | Machines parse JSON |
+| Metrics | Assumptions | Numbers tell truth |
+| Traces | Guesses | Show actual paths |
+
+If you're debugging production by adding print statements, you've already lost.
+
+Observability isn't overhead. It's the difference between engineering and guessing.
+
+---
+
+## On Automation
+
+**Humans review architecture. Machines enforce standards.**
+
+Formatting, linting, type checking - these aren't review comments. They're automated gates.
+
+Code review should be: "Is this the right approach?"
+
+Not: "You forgot a semicolon."
+
+<InfoBox type="warning" title="Reality">
+Every manual check is a check that will be skipped.
+</InfoBox>
+
+---
+
+## On Documentation
+
+Documentation in wikis dies. Documentation in code lives.
+
+The README is the product. If someone can't understand what this does in 5 minutes, the README has failed.
+
+ADRs (Architecture Decision Records) aren't bureaucracy. They're why future-you won't repeat past mistakes.
+
+**If it's not in the repo, it doesn't exist.**
+
+---
+
+## On Decisions
+
+The hierarchy:
+
+| Priority | Question |
+|----------|----------|
+| 1. Security | Can it be exploited? |
+| 2. Reliability | What happens when it fails? |
+| 3. Simplicity | Can someone understand this? |
+| 4. Speed | Is it fast enough? |
+
+Developer experience is a means, not an end. Good DX that compromises security is bad engineering.
+
+---
+
+## On Technology
+
+**The best technology is boring technology.**
+
+New frameworks are experiments. Battle-tested tools are foundations.
+
+Use the new thing for side projects. Use the proven thing for production.
+
+Your job isn't to evaluate technology. It's to ship product.
+
+---
+
+## The Point
+
+<InfoBox type="highlight" title="Physics, Not Rules">
+These aren't rules. They're physics.
+
+Complexity has gravity. It pulls everything toward entropy.
+
+Your job as an engineer isn't to add features. It's to **fight complexity while adding features**.
+</InfoBox>
+
+Every line of code is a liability.
+Every config is a decision to maintain.
+Every process is friction.
+
+**Delete. Simplify. Accelerate. Automate.**
+
+In that order.
+
+---
+
+## Software Engineering 3.0
+
+AI handles the tedious parts.
+
+But AI without principles is just faster chaos.
+
+These are the principles.
+
+<Quote author="First Principles Thinking">
+"The best engineers don't write the most code. They delete the most code while shipping the most value."
+</Quote>
