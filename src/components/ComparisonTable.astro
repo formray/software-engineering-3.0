@@ -11,11 +11,11 @@ interface Props {
 const { leftTitle, rightTitle, leftItems, rightItems, leftColor = 'red', rightColor = 'green' } = Astro.props;
 
 const colorMap = {
-  red: { bg: 'rgba(248, 81, 73, 0.1)', border: 'var(--accent-red)', text: 'var(--accent-red)' },
-  green: { bg: 'rgba(63, 185, 80, 0.1)', border: 'var(--accent-green)', text: 'var(--accent-green)' },
-  blue: { bg: 'rgba(88, 166, 255, 0.1)', border: 'var(--accent-blue)', text: 'var(--accent-blue)' },
-  orange: { bg: 'rgba(210, 153, 34, 0.1)', border: 'var(--accent-orange)', text: 'var(--accent-orange)' },
-  purple: { bg: 'rgba(139, 92, 246, 0.1)', border: '#8b5cf6', text: '#8b5cf6' },
+  red: { bg: 'var(--danger-bg)', border: 'var(--danger)', text: 'var(--danger)' },
+  green: { bg: 'var(--ok-bg)', border: 'var(--ok)', text: 'var(--ok)' },
+  blue: { bg: 'var(--panel)', border: 'var(--accent)', text: 'var(--accent-deep)' },
+  orange: { bg: 'var(--warn-bg)', border: 'var(--warn)', text: 'var(--warn)' },
+  purple: { bg: 'var(--panel)', border: 'var(--ink-2)', text: 'var(--ink-2)' },
 };
 
 const left = colorMap[leftColor];
@@ -24,13 +24,13 @@ const right = colorMap[rightColor];
 
 <div class="comparison-grid">
   <div class="comparison-side" style={`background: ${left.bg}; border-left-color: ${left.border};`}>
-    <h4 style={`color: ${left.text};`}>{leftTitle}</h4>
+    <span class="cmp-label" style={`color: ${left.text};`}>{leftTitle}</span>
     <ul>
       {leftItems.map((item) => <li>{item}</li>)}
     </ul>
   </div>
   <div class="comparison-side" style={`background: ${right.bg}; border-left-color: ${right.border};`}>
-    <h4 style={`color: ${right.text};`}>{rightTitle}</h4>
+    <span class="cmp-label" style={`color: ${right.text};`}>{rightTitle}</span>
     <ul>
       {rightItems.map((item) => <li>{item}</li>)}
     </ul>
@@ -41,39 +41,32 @@ const right = colorMap[rightColor];
   .comparison-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 1.5rem;
+    gap: 1rem;
     margin: 1.5rem 0;
   }
 
   .comparison-side {
-    padding: 1.25rem;
-    border-radius: 8px;
-    border-left: 4px solid;
+    padding: 1.15rem 1.3rem;
+    border-radius: 0;
+    border-left: 2px solid;
   }
 
-  h4 {
-    margin: 0 0 1rem 0;
-    font-size: 1rem;
+  .cmp-label {
+    display: block;
+    font-family: var(--sans);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    margin-bottom: 0.75rem;
   }
 
-  ul {
-    margin: 0;
-    padding-left: 1.25rem;
-    list-style-type: disc;
-  }
+  ul { margin: 0; padding-left: 1.2rem; list-style-type: disc; }
 
-  li {
-    color: var(--text-primary);
-    margin-bottom: 0.5rem;
-  }
-
-  li:last-child {
-    margin-bottom: 0;
-  }
+  li { color: var(--ink); margin-bottom: 0.45rem; font-size: 0.95rem; }
+  li:last-child { margin-bottom: 0; }
 
   @media (max-width: 768px) {
-    .comparison-grid {
-      grid-template-columns: 1fr;
-    }
+    .comparison-grid { grid-template-columns: 1fr; }
   }
 </style>

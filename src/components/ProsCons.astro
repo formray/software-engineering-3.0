@@ -8,14 +8,14 @@ const { pros, cons } = Astro.props;
 ---
 
 <div class="pros-cons-grid">
-  <div class="pros">
-    <h4>✅ PRO</h4>
+  <div class="pc pros">
+    <span class="pc-label">Pro</span>
     <ul>
       {pros.map((pro) => <li>{pro}</li>)}
     </ul>
   </div>
-  <div class="cons">
-    <h4>❌ CONTRO</h4>
+  <div class="pc cons">
+    <span class="pc-label">Contro</span>
     <ul>
       {cons.map((con) => <li>{con}</li>)}
     </ul>
@@ -26,55 +26,34 @@ const { pros, cons } = Astro.props;
   .pros-cons-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 1.5rem;
+    gap: 1rem;
     margin: 1.5rem 0;
   }
 
-  .pros, .cons {
-    padding: 1.25rem;
-    border-radius: 8px;
+  .pc { padding: 1.15rem 1.3rem; border-radius: 0; }
+
+  .pros { background: var(--ok-bg); border-left: 2px solid var(--ok); }
+  .cons { background: var(--danger-bg); border-left: 2px solid var(--danger); }
+
+  .pc-label {
+    display: block;
+    font-family: var(--sans);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    margin-bottom: 0.75rem;
   }
 
-  .pros {
-    background: rgba(63, 185, 80, 0.1);
-    border-left: 4px solid var(--accent-green);
-  }
+  .pros .pc-label { color: var(--ok); }
+  .cons .pc-label { color: var(--danger); }
 
-  .cons {
-    background: rgba(248, 81, 73, 0.1);
-    border-left: 4px solid var(--accent-red);
-  }
+  ul { margin: 0; padding-left: 1.2rem; list-style-type: disc; }
 
-  .pros h4 {
-    color: var(--accent-green);
-    margin: 0 0 1rem 0;
-    font-size: 1rem;
-  }
-
-  .cons h4 {
-    color: var(--accent-red);
-    margin: 0 0 1rem 0;
-    font-size: 1rem;
-  }
-
-  ul {
-    margin: 0;
-    padding-left: 1.25rem;
-    list-style-type: disc;
-  }
-
-  li {
-    color: var(--text-primary);
-    margin-bottom: 0.5rem;
-  }
-
-  li:last-child {
-    margin-bottom: 0;
-  }
+  li { color: var(--ink); margin-bottom: 0.45rem; font-size: 0.95rem; }
+  li:last-child { margin-bottom: 0; }
 
   @media (max-width: 768px) {
-    .pros-cons-grid {
-      grid-template-columns: 1fr;
-    }
+    .pros-cons-grid { grid-template-columns: 1fr; }
   }
 </style>
