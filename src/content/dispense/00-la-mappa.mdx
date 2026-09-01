@@ -1,0 +1,216 @@
+---
+title: "La Mappa"
+description: "Il quadro d'insieme della disciplina: sei strati e due proprietà trasversali, la definizione di ciascun concetto, i confini che li separano, e un caso concreto seguito attraverso l'intera pila."
+order: 0
+argomento: "Atlante"
+date: 2026-08-25
+---
+
+*Documento indice della serie · Ultima revisione: 25 agosto 2026 · Prerequisiti: esperienza di sviluppo software; nessuna conoscenza pregressa di AI engineering.*
+
+<p class="part">Parte I · Il quadro</p>
+
+## 1. Il problema della nomenclatura
+
+La disciplina che questa serie studia non ha ancora un nome stabile. Negli ultimi tre anni sono stati coniati, in sequenza: prompt engineering, context engineering, agent engineering, harness engineering, loop engineering. Ogni termine è arrivato accompagnato dall'impressione di rendere obsoleti i precedenti, e chi studia il campo si trova regolarmente davanti alla domanda: quello che ho imparato l'anno scorso vale ancora?
+
+La risposta è sì, e il motivo è strutturale: **queste discipline non si sostituiscono, si impilano**. Ciascuna risponde a una domanda diversa, e le domande stanno una sopra l'altra. Il prompt engineering non è stato reso obsoleto dal context engineering: è diventato lo strato inferiore — ancora presente, ancora necessario, solo non più il livello dove avviene l'innovazione.
+
+Questa dispensa fornisce il quadro dentro cui collocare ogni concetto. L'uso previsto è questo: davanti a un termine, un tool o un paper nuovo, la prima domanda non è «devo impararlo?», ma *a quale strato appartiene, e a quale domanda risponde?* Nella maggior parte dei casi si scopre che si tratta di una risposta nuova a una domanda già nota — e a quel punto si sa con cosa confrontarla.
+
+Due discipline non trovano posto nella pila, perché la attraversano tutta: la **valutazione** (come si stabilisce che il sistema funziona) e la **sicurezza** (cosa si impedisce al sistema di fare). Nell'Atlante compaiono come colonne laterali, e vengono trattate nei §9 e §10.
+
+## 2. L'Atlante
+
+<figure>
+<div class="atlas">
+  <div class="layer"><span class="l-id">L5</span><span class="l-name">Loop engineering</span><span class="l-q">Chi decide il prossimo ciclo, e cosa lo chiude?</span></div>
+  <div class="trans t-evals">Valutazione</div>
+  <div class="trans t-sec">Sicurezza</div>
+  <div class="layer"><span class="l-id">L4</span><span class="l-name">Harness engineering</span><span class="l-q">Dentro quale sistema opera il modello?</span></div>
+  <div class="layer"><span class="l-id">L3</span><span class="l-name">Tool, protocolli, skill</span><span class="l-q">Cosa può toccare, e con quale contratto?</span></div>
+  <div class="layer"><span class="l-id">L2</span><span class="l-name">Context engineering</span><span class="l-q">Cosa sa in questo preciso momento?</span></div>
+  <div class="layer"><span class="l-id">L1</span><span class="l-name">Prompt engineering</span><span class="l-q">Cosa gli viene chiesto, esattamente?</span></div>
+  <div class="layer"><span class="l-id">L0</span><span class="l-name">Modello &amp; inference</span><span class="l-q">Quale modello, e dove gira?</span></div>
+</div>
+<figcaption>L'Atlante. Si legge dal basso: ogni strato utilizza quello inferiore ed è diretto da quello superiore. Le due colonne non sono un piano dell'edificio: sono proprietà richieste a ogni piano.</figcaption>
+</figure>
+
+Una regola tiene insieme la pila, e conviene fissarla subito perché ricorre in tutta la serie. Quando si sale di uno strato, quello inferiore non scompare: **si trasforma in un artefatto** — un file, del codice, qualcosa di versionabile:
+
+- il prompt scritto al volo diventa una *specifica* salvata nel repository;
+- il contesto assemblato a mano diventa un *playbook* su file;
+- il flusso di lavoro seguito a memoria diventa *codice dell'harness*;
+- l'harness stesso, infine, diventa l'oggetto che un ciclo di livello superiore ottimizza.
+
+Questa progressione — istruzioni → contesto strutturato → workflow → codice — è documentata da Lilian Weng nel saggio di riferimento del campo (luglio 2026), ed è anche la garanzia che nessuna competenza acquisita a un livello va perduta: la si ritrova, congelata, dentro il livello successivo.
+
+<p class="part">Parte II · Gli strati</p>
+
+## 3. L0 — Modello e inference
+
+**Definizione.** Lo strato della scelta del modello e del luogo di esecuzione: API di un fornitore, server proprio, o macchina locale. È l'unico strato che non si progetta ma si *seleziona* — il lavoro qui consiste nel decidere, e nel rifare la decisione quando il panorama cambia.
+
+**Terminologia essenziale.** I modelli *open weights* sono quelli di cui si possono scaricare i pesi ed eseguirli su hardware proprio. La *quantizzazione* è la compressione di quei pesi (formati tipici: GGUF, AWQ): si accetta una piccola perdita di qualità in cambio di una riduzione drastica della memoria richiesta — è ciò che rende eseguibile un modello da 8 miliardi di parametri su un portatile. La *KV cache* è la memoria di lavoro dell'inferenza, ed è la ragione per cui il contesto lungo costa. Il *fine-tuning* (con la variante a basso costo LoRA) è il riaddestramento parziale di un modello su dati propri.
+
+<div class="ex"><span class="label">Esempio quotidiano</span>
+<p>Un'azienda deve riassumere documenti che per contratto non possono uscire dalla rete interna. La decisione di L0 non è «quale modello è il migliore», ma: quale modello open weights, a quale quantizzazione, regge questo carico sul server che abbiamo — e con quale perdita misurabile rispetto all'alternativa via API.</p></div>
+
+**L'errore ricorrente.** Scegliere il modello in base ai benchmark generali anziché a una prova sul proprio carico di lavoro, e non ripetere mai la scelta: nel 2026 il panorama dei modelli cambia in modo rilevante ogni trimestre.
+
+## 4. L1 — Prompt engineering
+
+**Definizione.** La formulazione di una singola richiesta in modo da ottenere l'output corretto al primo tentativo: istruzioni esplicite, esempi, formato d'uscita dichiarato in anticipo.
+
+**Terminologia essenziale.** *Few-shot* indica il mostrare al modello due o tre esempi del risultato desiderato invece di descriverlo a parole. *Structured output* indica il vincolare la risposta a un formato preciso — tipicamente JSON conforme a uno schema; il meccanismo tecnico che lo garantisce a livello di generazione si chiama *constrained decoding*.
+
+**Stato della disciplina.** Consolidata, non superata. I trucchi di formulazione contano meno di due anni fa, perché i modelli seguono le istruzioni molto meglio; ciò che non è cambiato è la necessità di specificare obiettivi, vincoli e criteri di successo. La differenza pratica è la forma: la richiesta non vive più in un prompt usa-e-getta, ma in una specifica scritta e versionata (il tema è sviluppato nel [Metodo operativo](/software-engineering-3.0/dispense/02-metodo-operativo/), pratica 1).
+
+<div class="ex"><span class="label">Esempio quotidiano</span>
+<p>«Scrivi i test per questo modulo» produce risultati diversi a ogni tentativo. «Scrivi i test per <code>parseFilters()</code>: un caso per input valido, uno per parametro mancante, uno per tipo errato; usa il pattern AAA già presente in <code>tests/</code>; non aggiungere dipendenze» produce quasi sempre lo stesso, buono. La seconda formulazione è L1 fatto bene — e si noti che è riusabile tale e quale il mese prossimo.</p></div>
+
+**L'errore ricorrente.** Iterare sulla formulazione quando il problema sta due strati sopra: il modello risponde male non perché la domanda è posta male, ma perché nel suo contesto c'è l'informazione sbagliata.
+
+## 5. L2 — Context engineering
+
+**Definizione.** Se il prompt è ciò che viene chiesto, il contesto è tutto ciò che il modello sa nel momento della richiesta: documenti recuperati, memoria delle sessioni precedenti, output dei tool, cronologia della conversazione. Il context engineering è la disciplina che decide cosa merita di occupare quella finestra — una risorsa limitata e costosa.
+
+**Terminologia essenziale.** Il *retrieval* (spesso indicato come RAG, Retrieval-Augmented Generation) è il recupero automatico dei documenti pertinenti da una base di conoscenza; le sue tecniche interne — chunking, ricerca ibrida, reranking — sono l'oggetto della [dispensa sui database vettoriali](/software-engineering-3.0/dispense/04-database-vettoriali/). Il *context rot* è il degrado delle sessioni lunghe: informazioni obsolete o ridondanti si accumulano e soffocano quelle utili. La *compaction* è la compressione automatica che l'ambiente esegue quando la finestra si riempie: utile, ma decide autonomamente cosa scartare. *Lost in the middle* è la tendenza, misurata sperimentalmente, dei modelli a ignorare le informazioni collocate al centro di un contesto lungo — il fenomeno persiste anche con finestre da un milione di token.
+
+**Il risultato empirico da conoscere.** La maggioranza dei fallimenti degli agenti in produzione non è attribuibile al modello ma al contesto. Ne segue una regola diagnostica: quando l'agente sbaglia, la prima domanda è «cosa c'era nella sua finestra in quel momento?» — e se non si è in grado di rispondere, il problema reale è l'assenza di osservabilità, non il modello.
+
+<div class="ex"><span class="label">Esempio quotidiano</span>
+<p>Si chiede all'agente di aggiungere la validazione a un endpoint. Il progetto ha già un middleware di validazione, ma nella sessione — aperta da due ore su tutt'altro — quel file non è mai comparso. L'agente installa una libreria nuova e valida inline: soluzione corretta in astratto, sbagliata in questo repository. Non è un errore di intelligenza; è un fallimento di contesto, e si previene a L2, non riformulando la richiesta.</p></div>
+
+**L'errore ricorrente.** Accumulare tutto in contesto e affidarsi alla compaction automatica: funziona finché la compressione non elimina, silenziosamente, l'informazione critica — mentre il modello continua a rispondere con la stessa sicurezza.
+
+## 6. L3 — Tool, protocolli, skill
+
+**Definizione.** Lo strato delle capacità d'azione e del loro contratto. Un *tool* è una funzione che il modello può invocare (leggere un file, eseguire una query, chiamare un'API). Un *protocollo* è lo standard con cui i tool vengono descritti ed esposti. Una *skill* è conoscenza procedurale in forma di file: non «cosa si può fare», ma «come si fa correttamente in questo contesto».
+
+**Terminologia essenziale.** *MCP* (Model Context Protocol) è lo standard che si è imposto per collegare applicazioni e modelli — la funzione che USB-C svolge per i cavi. Un dato di calendario rilevante: la revisione di luglio 2026 è la più estesa dalla nascita del protocollo (nucleo *stateless*: ogni richiesta autosufficiente, senza sessioni a livello di trasporto; più deprecazioni di funzionalità storiche), e i server scritti prima vanno migrati. Un dettaglio spesso trascurato: nome e descrizione di un tool sono a tutti gli effetti prompt — il modello decide se e come usare il tool leggendoli, quindi la loro scrittura è lavoro di L1 applicato a L3.
+
+<div class="ex"><span class="label">Esempio quotidiano</span>
+<p>Un tool descritto come <code>search(q)</code> — «esegue una ricerca» — viene usato dal modello a sproposito o mai. Lo stesso tool descritto come «cerca nella documentazione interna del progetto; usare prima di proporre soluzioni architetturali; restituisce al massimo 5 risultati» viene usato al momento giusto. Il codice non è cambiato: è cambiato il contratto.</p></div>
+
+**L'errore ricorrente.** Trattare le skill come documentazione anziché come codice. Una skill viene eseguita senza revisione umana: se contiene un errore, lo replica a ogni invocazione. Va quindi versionata, dotata di un test, e rivista a ogni cambio di modello. L'esperienza di campo aggiunge: poche e brevi — la proliferazione ha già un nome, «skills hell».
+
+## 7. L4 — Harness engineering
+
+**Definizione.** *Harness* significa imbracatura: è il software che circonda il modello e ne governa l'esecuzione — come osserva l'ambiente, come agisce, cosa memorizza, come verifica il proprio lavoro. Quando si usa un coding agent commerciale, il valore percepito non proviene solo dal modello: proviene dall'harness progettato attorno.
+
+**Terminologia essenziale.** I tre pattern fondamentali, trattati per esteso nella [dispensa dedicata](/software-engineering-3.0/dispense/01-harness-loop-engineering/): il *workflow* (il percorso pianifica–esegui–verifica–correggi entro cui il modello opera); il *filesystem come memoria* (lo stato importante vive su file, non nella conversazione, perché i file sopravvivono alla sessione e il modello sa già manipolarli); i *subagent* (processi paralleli delegati, per esplorare alternative senza inquinare il contesto principale). In questo strato rientra anche ciò che talvolta viene chiamato *graph engineering*: la rappresentazione del workflow come grafo — nodi che invocano il modello, archi di logica — che lo rende ispezionabile e ottimizzabile, manualmente o per ricerca automatica.
+
+<div class="ex"><span class="label">Esempio quotidiano</span>
+<p>Due sviluppatori usano lo stesso modello. Il primo lavora in chat e incolla file a mano; il secondo ha un ambiente in cui il modello legge il repository, esegue i test da solo e scrive i risultati su file. A parità di modello, il secondo ottiene risultati migliori in modo sistematico: la differenza è interamente L4.</p></div>
+
+**L'errore ricorrente.** Inventare astrazioni originali. Il modello è stato addestrato su milioni di progetti convenzionali: un harness che assomiglia a un normale progetto Unix — file, directory, bash, git — funziona meglio di uno con astrazioni eleganti che il modello non ha mai incontrato.
+
+## 8. L5 — Loop engineering
+
+**Definizione.** L'harness fornisce un agente in grado di lavorare; il loop engineering costruisce i cicli *sopra* quell'agente: chi assegna il compito successivo, chi ne controlla il risultato, e quale segnale — non falsificabile dall'agente — dichiara concluso il lavoro. Il baricentro del lavoro umano si sposta: dallo scrivere le richieste al progettare il sistema che le genera e le verifica.
+
+**Terminologia essenziale.** La letteratura del 2026 distingue cinque cicli, ordinati per ampiezza (il diagramma completo è nella [dispensa dedicata](/software-engineering-3.0/dispense/01-harness-loop-engineering/)): il ciclo di *esecuzione* interno all'agente; il *task loop*, che riavvia l'agente a contesto pulito contro la stessa specifica finché i criteri non sono soddisfatti; il *product loop* (o «software factory»), che governa un'intera codebase e il suo backlog; il *system loop*, in cui un secondo sistema studia e migliora il primo; e il ciclo di *supervisione*, dove risiedono obiettivi e budget — l'unico che spetta stabilmente a una persona. Gli *hard stop* sono i tre arresti obbligatori di ogni ciclo: numero massimo di iterazioni, assenza di progresso, budget esaurito.
+
+<div class="ex"><span class="label">Esempio quotidiano</span>
+<p>Correzione di un bug con test di riproduzione già scritto. Senza L5: si chiede il fix, si legge la proposta, si rilancia, si richiede — la persona fa da ciclo. Con L5: uno script rilancia l'agente contro la specifica finché il test di riproduzione e la suite completa non passano, con limite di cinque tentativi, e notifica solo l'esito. Stesso modello, stesso bug: cambia chi tiene il ciclo.</p></div>
+
+**L'errore ricorrente.** Usare come condizione di chiusura la dichiarazione dell'agente. «Ho completato il compito» è un output come un altro, non una prova: la chiusura deve provenire da qualcosa che l'agente non controlla — i test, un controllo esterno, una persona.
+
+## 9. Trasversale A — Valutazione e osservabilità
+
+**Definizione.** L'insieme dei metodi per stabilire che il sistema funziona: prima del rilascio, dopo ogni modifica, e durante l'esercizio. Con il software deterministico questa funzione è svolta dai test; con i modelli linguistici il medesimo input può produrre output diversi, e servono strumenti costruiti per misurare comportamenti, non uguaglianze. Il campo li chiama *eval*.
+
+**Terminologia essenziale.** Un *golden set* è una raccolta di casi di riferimento: input reali accompagnati dalla descrizione di cosa costituisce un buon output. *LLM-as-judge* è l'uso di un modello per giudicare l'output di un altro — pratico, ma con distorsioni documentate: premia le risposte prolisse e favorisce la prima alternativa presentata. *Eval-driven development* è la disciplina di scrivere la suite di valutazione prima o insieme alla funzionalità che dovrà giudicare, in analogia con il TDD. Le *tracce* sono i registri completi delle azioni dell'agente: senza tracce, ogni discussione sulle cause di un errore è congettura.
+
+<div class="ex"><span class="label">Esempio quotidiano</span>
+<p>Esce un modello nuovo e si vuole capire se adottarlo. Senza valutazione: lo si prova su due richieste, «sembra meglio», si migra. Con valutazione: si eseguono i venti casi del golden set con il modello vecchio e con il nuovo; il primo passa 17 casi, il secondo 14 — tre regressioni, identificate per nome, prima di aver toccato la produzione.</p></div>
+
+**Perché nel 2026 non è facoltativa.** I modelli sottostanti cambiano ogni poche settimane. Una suite che gira a ogni modifica è l'unico meccanismo che intercetta le regressioni silenziose; in sua assenza, le si scopre dagli utenti.
+
+## 10. Trasversale B — Sicurezza e permessi
+
+**Definizione.** L'insieme dei vincoli che rendono certi comportamenti impossibili per costruzione, e non semplicemente scoraggiati. Il punto di partenza è un limite tecnico dei modelli attuali che va accettato: un modello non distingue in modo affidabile le istruzioni dai dati. Tutto ciò che legge — una issue, una pagina web, un allegato — può contenere un ordine, e il modello può eseguirlo. Il fenomeno si chiama *prompt injection* ed è, dal 2023 a oggi, il problema numero uno del settore, tuttora irrisolto.
+
+**Terminologia essenziale.** La *lethal trifecta* (Willison) è la combinazione che trasforma il limite teorico in danno concreto: accesso a dati privati, esposizione a contenuti non fidati, capacità di comunicare verso l'esterno. Un sistema con tutte e tre le proprietà è vulnerabile per costruzione; togliere una delle tre spezza la catena d'attacco. Le *sandbox* sono ambienti d'esecuzione isolati (tecnicamente microVM) per il codice generato. I *permessi per operazione* sono l'alternativa architetturale ai *guardrail* testuali: il guardrail chiede al modello di astenersi (e può essere aggirato via injection); il permesso rende l'azione impossibile.
+
+<div class="ex"><span class="label">Esempio quotidiano</span>
+<p>Un agente fa il triage delle issue di un repository privato e propone correzioni. Verifica della trifecta: legge codice privato (sì), legge testo scritto da sconosciuti nelle issue (sì), può aprire pull request e fare richieste di rete (sì). Tre sì: chiunque apra una issue può, in linea di principio, dirigere l'agente. Mitigazione tipica: rete limitata a una lista di destinazioni e PR in modalità bozza con approvazione umana — si è tolta la terza gamba.</p></div>
+
+**Perché nel 2026 il registro è cambiato.** Fino all'anno scorso questa sezione elencava scenari; quest'anno il rapporto OWASP di settore cataloga vulnerabilità con identificativo CVE e incidenti verificati su strumenti di uso comune. A ciò si aggiunge, per chi opera nell'Unione Europea, l'entrata in vigore degli obblighi di trasparenza dell'AI Act (articolo 50, dal 2 agosto 2026).
+
+<p class="part">Parte III · Le relazioni</p>
+
+## 11. I confini tra i concetti
+
+La padronanza di questo vocabolario si misura sui confini, non sulle definizioni. Ognuna delle righe seguenti corrisponde a una confusione frequente nella letteratura divulgativa.
+
+| Confine | La distinzione |
+|---|---|
+| Prompt ↔ Contesto | Il prompt è la richiesta; il contesto è tutto ciò che il modello sa mentre la riceve. Il prompt è una parte del contesto, non viceversa. |
+| Contesto ↔ RAG | Il RAG è una tecnica del context engineering, non un sinonimo: la disciplina comprende anche memoria, compaction e gestione del budget di token, che con il retrieval non c'entrano. |
+| Contesto ↔ Harness | Il context engineering stabilisce *cosa* deve entrare nella finestra; l'harness è il *codice* che ve lo fa entrare a runtime, oltre a permessi, stato e workflow. |
+| Harness ↔ Loop | L'harness fornisce l'agente che lavora; il loop engineering costruisce i cicli sopra l'agente e le loro condizioni di chiusura. |
+| Workflow ↔ Grafo | Stesso oggetto in due forme: il grafo è il workflow reso esplicito — e perciò ispezionabile e ottimizzabile anche da un algoritmo. |
+| Skill ↔ Tool | Il tool è una capacità («può eseguire query»); la skill è sapere procedurale («come si scrivono le query in questo progetto»). Un tool si invoca; una skill si legge. |
+| Eval ↔ Test | Il test verifica codice deterministico e risponde sì o no; l'eval misura un comportamento variabile e risponde con un tasso su un insieme di casi. |
+| Guardrail ↔ Permesso | Il guardrail chiede al sistema di non fare una cosa, e può essere aggirato; il permesso gliela rende impossibile. La sicurezza sostanziale risiede nel secondo. |
+
+## 12. Un caso attraverso la pila
+
+Per verificare che la mappa regga, seguiamo un compito ordinario attraverso tutti gli strati. Il compito: **aggiungere paginazione e filtro per stato all'endpoint `GET /orders`** di una API Express con MongoDB — lo stesso caso di studio usato nel [Metodo operativo](/software-engineering-3.0/dispense/02-metodo-operativo/).
+
+| Strato | Cosa succede in questo compito |
+|---|---|
+| **L0** | Nessuna decisione: il modello è quello configurato nel coding agent. L0 tornerebbe in gioco solo se il costo per task risultasse fuori scala. |
+| **L1** | La richiesta è formalizzata in una specifica: obiettivo, esclusioni (non toccare lo schema), vincoli (diff sotto le 300 righe), criteri di accettazione verificabili a macchina. |
+| **L2** | Il playbook di progetto (`CLAUDE.md`) è nel contesto e contiene le regole rilevanti: la validazione passa dal middleware esistente, gli errori rispondono in problem+json. La sessione è nuova, dedicata a questo solo compito. |
+| **L3** | L'agente usa i tool standard (lettura file, bash, git). La skill `express-endpoint`, scritta dopo tre compiti simili, gli ricorda dove vivono router, schemi e test in questo repository. |
+| **L4** | L'harness esegue il ciclo interno: legge il codice, modifica, lancia i test, osserva l'esito, corregge. Lo stato intermedio (piano, note) vive su file. |
+| **L5** | Uno script esterno riavvia l'agente a contesto pulito finché i criteri della specifica non passano, con tre arresti obbligatori. Alla terza iterazione i criteri passano e il ramo viene proposto per la review. |
+| **Valutazione** | Il fallimento dell'iterazione 2 (validazione scritta inline, ignorando il middleware) viene salvato come caso G-001 del golden set: la prossima volta sarà un controllo, non un ricordo. |
+| **Sicurezza** | Il compito nasce da una specifica interna: contenuto fidato, trifecta non completa. Il verifier e la configurazione restano comunque fuori dalla portata dell'agente. |
+
+<div class="box key">
+  <span class="label">Il punto del caso</span>
+  <p>Nessuno strato è teorico: in un compito da mezza giornata compaiono tutti, in proporzioni diverse. Studiare la disciplina significa riconoscere questi ruoli mentre si lavora — il Metodo operativo insegna a costruirli uno per uno.</p>
+</div>
+
+<p class="part">Parte IV · Il percorso</p>
+
+## 13. La rotta della serie
+
+| # | Dispensa | Strato | Stato |
+|---|---|---|---|
+| 1 | [Database vettoriali](/software-engineering-3.0/dispense/04-database-vettoriali/) (HNSW, embedding, retrieval) | L2 | <span class="badge-done">pubblicata</span> |
+| 2 | [Harness & Loop Engineering](/software-engineering-3.0/dispense/01-harness-loop-engineering/) | L4–L5 | <span class="badge-done">pubblicata</span> |
+| 3 | [Metodo operativo](/software-engineering-3.0/dispense/02-metodo-operativo/) (playbook) | tutti | <span class="badge-done">pubblicata</span> |
+| 4 | [Sotto Ollama — Il runtime di inferenza](/software-engineering-3.0/dispense/03-sotto-ollama/) | L0 | <span class="badge-done">pubblicata</span> |
+| 5 | Sicurezza degli agenti e AI Act | trasv. B | <span class="badge-todo">prossima</span> |
+| 6 | Valutazione ed eval-driven development | trasv. A | <span class="badge-todo">pianificata</span> |
+| 7 | MCP: la specifica di luglio 2026 e la migrazione | L3 | <span class="badge-todo">pianificata</span> |
+| 8 | Context engineering | L2 | <span class="badge-todo">pianificata</span> |
+| 9 | Sandbox e isolamento | trasv. B | <span class="badge-todo">pianificata</span> |
+
+Nota di manutenzione: questo campo si muove su cicli trimestrali. Ogni nuova dispensa aggiorna questa pagina — stati, schede e date — e ogni affermazione datata va riverificata prima di essere riutilizzata a distanza di mesi.
+
+## 14. Domande di autoverifica
+
+Se la mappa è stata assimilata, a queste domande si risponde senza rileggere. In caso contrario, accanto a ciascuna è indicata la sezione da rivedere.
+
+<ol class="selfcheck">
+<li>Perché il prompt engineering non è stato reso obsoleto dal context engineering? (§1, §4)</li>
+<li>Che fine fa uno strato quando se ne costruisce uno sopra? (§2)</li>
+<li>Un collega dice «il RAG è il context engineering». Cosa gli manca? (§11)</li>
+<li>L'agente ha installato una libreria che il progetto già copre con un middleware. A quale strato appartiene il fallimento, e perché non è L1? (§5)</li>
+<li>Perché la descrizione di un tool è «lavoro di L1 applicato a L3»? (§6)</li>
+<li>Qual è la differenza operativa tra un guardrail e un permesso, e quale dei due resiste alla prompt injection? (§10)</li>
+<li>Quali sono le tre proprietà della lethal trifecta, e quale conviene tipicamente rimuovere? (§10)</li>
+<li>Perché «l'agente dice di aver finito» non è una condizione di chiusura valida per un ciclo? (§8)</li>
+<li>Cosa distingue un'eval da un test, nella forma della risposta che danno? (§11)</li>
+<li>Nel caso del §12, in quale punto preciso la valutazione entra in gioco — e cosa produce?</li>
+</ol>
+
+---
+
+*Dispensa 00 · Serie AI Engineering · agosto 2026 — Dispense collegate: [Metodo operativo](/software-engineering-3.0/dispense/02-metodo-operativo/) (la pratica) e [Harness & Loop Engineering](/software-engineering-3.0/dispense/01-harness-loop-engineering/) (il riferimento tecnico per L4–L5).*

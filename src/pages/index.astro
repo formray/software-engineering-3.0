@@ -4,133 +4,162 @@ import Card from '../components/Card.astro';
 import Search from '../components/Search.astro';
 import { getCollection } from 'astro:content';
 
-const articles = await getCollection('articles');
-const guides = await getCollection('guides');
 const base = import.meta.env.BASE_URL;
+
+const readingMin = (body: string | undefined) =>
+  Math.max(1, Math.ceil((body ?? '').trim().split(/\s+/).length / 200));
+
+const byDateDesc = (a: { data: { date?: Date } }, b: { data: { date?: Date } }) =>
+  (b.data.date?.getTime() ?? 0) - (a.data.date?.getTime() ?? 0);
+
+const dispense = (await getCollection('dispense')).sort((a, b) => a.data.order - b.data.order);
+const articles = await getCollection('articles');
+const guides = (await getCollection('guides')).sort(byDateDesc);
+
+const fondamenta = articles.filter((a) => a.data.section === 'fondamenta').sort(byDateDesc);
+const analisi = articles.filter((a) => a.data.section === 'analisi').sort(byDateDesc);
+
+const inCoda = [
+  { order: 5, title: 'Sicurezza degli agenti', argomento: 'Trasversale B', description: 'Permessi, sandbox, lethal trifecta e AI Act: cosa rendere impossibile per costruzione.' },
+  { order: 6, title: 'Evals', argomento: 'Valutazione', description: 'Misurare il comportamento dei sistemi AI prima che lo facciano gli utenti.' },
+];
+
+const allDates = [...dispense, ...articles, ...guides]
+  .map((e) => e.data.date)
+  .filter((d): d is Date => Boolean(d));
+const lastUpdated = allDates.length
+  ? new Date(Math.max(...allDates.map((d) => d.getTime())))
+  : new Date();
 ---
 
-<BaseLayout title="Home">
-  <header>
-    <div class="logo">🚀</div>
-    <h1 class="gradient-title">Software Engineering 3.0</h1>
-    <p class="tagline">Raccolta di articoli e guide sul mondo dello sviluppo software nell'era dell'AI</p>
+<BaseLayout title="Home" updated={lastUpdated}>
+  <header class="hero">
+    <p class="eyebrow">Dispense, articoli e guide <span class="hero-dot">·</span> in italiano</p>
+    <h1>Lo sviluppo software<br />nell'era dell'AI</h1>
+    <p class="tagline">
+      Una raccolta curata per chi costruisce: la serie di dispense AI Engineering,
+      le fondamenta del nuovo paradigma, guide operative e analisi puntuali.
+    </p>
   </header>
 
   <Search />
 
-  <div class="controls">
-    <div class="filters">
-      <button class="filter-btn active" data-filter="all">Tutti</button>
-      <button class="filter-btn" data-filter="article">Articoli</button>
-      <button class="filter-btn" data-filter="guide">Guide</button>
+  <section id="dispense" aria-labelledby="dispense-title">
+    <div class="sec-head rv">
+      <h2 id="dispense-title">Dispense</h2>
+      <span class="sec-note">Serie AI Engineering · In ordine di lettura</span>
     </div>
-    <div class="sorting">
-      <span class="sort-label">Ordina:</span>
-      <button class="sort-btn active" data-sort="date-desc">Più recenti</button>
-      <button class="sort-btn" data-sort="date-asc">Più vecchi</button>
-      <button class="sort-btn" data-sort="alpha">A-Z</button>
+    <div class="cards-grid">
+      {dispense.map((d, i) => (
+        <Card
+          title={d.data.title}
+          description={d.data.description}
+          eyebrow={`Dispensa · ${d.data.argomento}`}
+          href={`${base}/dispense/${d.id}`}
+          date={d.data.date}
+          order={d.data.order}
+          readingMin={readingMin(d.body)}
+          pill={d.data.tag}
+          delay={Math.min(i, 5) * 60}
+        />
+      ))}
+      {inCoda.map((d, i) => (
+        <Card
+          title={d.title}
+          description={d.description}
+          eyebrow={`Dispensa · ${d.argomento}`}
+          order={d.order}
+          pill="In coda"
+          ghost
+          delay={Math.min(dispense.length + i, 7) * 60}
+        />
+      ))}
     </div>
-  </div>
+  </section>
 
-  <div class="cards-grid" id="cards-grid">
-    {articles.map((article) => (
-      <Card
-        title={article.data.title}
-        description={article.data.description}
-        icon={article.data.icon}
-        href={`${base}/articles/${article.id}`}
-        type="article"
-        tag={article.data.tag}
-        date={article.data.date}
-      />
-    ))}
-
-    {guides.map((guide) => (
-      <Card
-        title={guide.data.title}
-        description={guide.data.description}
-        icon={guide.data.icon}
-        href={`${base}/guides/${guide.id}`}
-        type="guide"
-        tag={guide.data.tag}
-        date={guide.data.date}
-      />
-    ))}
-  </div>
-
-  <div class="setup-section">
-    <h2>Setup Automation</h2>
-    <p>Configura il tuo ambiente di sviluppo automaticamente con Claude Code.</p>
-    <div class="setup-cards">
-      <a href={`${base}/setup/macos.md`} class="setup-card">
-        <span class="setup-icon">🍎</span>
-        <span class="setup-title">macOS Setup</span>
-        <span class="setup-desc">Homebrew, Node, Python, Docker</span>
-      </a>
-      <a href={`${base}/setup/windows.md`} class="setup-card">
-        <span class="setup-icon">🪟</span>
-        <span class="setup-title">Windows Setup</span>
-        <span class="setup-desc">winget, Scoop, WSL2, Node, Python</span>
-      </a>
+  <section id="fondamenta" aria-labelledby="fondamenta-title">
+    <div class="sec-head rv">
+      <h2 id="fondamenta-title">Fondamenta</h2>
+      <span class="sec-note">Il paradigma e i principi</span>
     </div>
-    <p class="setup-hint">Apri questa repo con <a href="https://claude.ai/claude-code" target="_blank">Claude Code</a> e chiedi di leggere il file di setup ed eseguire i comandi.</p>
-  </div>
+    <div class="cards-grid">
+      {fondamenta.map((a, i) => (
+        <Card
+          title={a.data.title}
+          description={a.data.description}
+          eyebrow={a.data.tag ?? 'Fondamenta'}
+          href={`${base}/articles/${a.id}`}
+          date={a.data.date}
+          readingMin={readingMin(a.body)}
+          delay={Math.min(i, 5) * 60}
+        />
+      ))}
+    </div>
+  </section>
+
+  <section id="guide" aria-labelledby="guide-title">
+    <div class="sec-head rv">
+      <h2 id="guide-title">Guide tecniche</h2>
+      <span class="sec-note">Setup e strumenti</span>
+    </div>
+    <div class="cards-grid">
+      {guides.map((g, i) => (
+        <Card
+          title={g.data.title}
+          description={g.data.description}
+          eyebrow={g.data.tag ?? 'Guida'}
+          href={`${base}/guides/${g.id}`}
+          date={g.data.date}
+          readingMin={readingMin(g.body)}
+          delay={Math.min(i, 5) * 60}
+        />
+      ))}
+    </div>
+  </section>
+
+  <section id="analisi" aria-labelledby="analisi-title">
+    <div class="sec-head rv">
+      <h2 id="analisi-title">Analisi puntuali</h2>
+      <span class="sec-note">Fotografie datate · Si verificano a scadenza</span>
+    </div>
+    <div class="cards-grid">
+      {analisi.map((a, i) => (
+        <Card
+          title={a.data.title}
+          description={a.data.description}
+          eyebrow={a.data.tag ?? 'Analisi'}
+          href={`${base}/articles/${a.id}`}
+          date={a.data.date}
+          readingMin={readingMin(a.body)}
+          delay={Math.min(i, 5) * 60}
+        />
+      ))}
+    </div>
+  </section>
 </BaseLayout>
 
-<script>
-  const filterBtns = document.querySelectorAll('.filter-btn');
-  const sortBtns = document.querySelectorAll('.sort-btn');
-  const grid = document.getElementById('cards-grid');
-  let currentFilter = 'all';
-
-  // Filter functionality
-  filterBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      filterBtns.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      currentFilter = btn.dataset.filter;
-      applyFilter();
-    });
-  });
-
-  function applyFilter() {
-    const cards = document.querySelectorAll('.card');
-    cards.forEach(card => {
-      if (currentFilter === 'all' || card.dataset.type === currentFilter) {
-        card.classList.remove('hidden');
-      } else {
-        card.classList.add('hidden');
-      }
-    });
+<style>
+  .hero {
+    padding: 4.5rem 0 3rem;
+    border-bottom: none;
+    margin-bottom: 1.5rem;
   }
 
-  // Sort functionality
-  sortBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      sortBtns.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      sortCards(btn.dataset.sort);
-    });
-  });
+  .hero .eyebrow { margin-bottom: 1.25rem; }
+  .hero-dot { color: var(--accent); }
 
-  function sortCards(sortType) {
-    const cards = Array.from(grid.querySelectorAll('.card'));
-
-    cards.sort((a, b) => {
-      if (sortType === 'date-desc') {
-        return b.dataset.date.localeCompare(a.dataset.date);
-      } else if (sortType === 'date-asc') {
-        return a.dataset.date.localeCompare(b.dataset.date);
-      } else if (sortType === 'alpha') {
-        return a.dataset.title.localeCompare(b.dataset.title);
-      }
-      return 0;
-    });
-
-    cards.forEach(card => grid.appendChild(card));
-    applyFilter();
+  .hero h1 {
+    font-size: clamp(2.6rem, 7vw, 4rem);
+    font-weight: 500;
+    line-height: 1.06;
+    letter-spacing: -0.02em;
+    margin-bottom: 1.4rem;
   }
 
-  // Initial sort by date descending
-  sortCards('date-desc');
-</script>
+  .hero .tagline {
+    font-size: 1.2rem;
+    max-width: 38rem;
+  }
+
+  section { margin-bottom: 1rem; }
+</style>
