@@ -6,7 +6,7 @@ const articles = defineCollection({
   schema: z.object({
     title: z.string(),
     description: z.string(),
-    icon: z.string(),
+    icon: z.string().optional(),
     tag: z.string().optional(),
     date: z.date().optional(),
   }),
@@ -17,7 +17,7 @@ const guides = defineCollection({
   schema: z.object({
     title: z.string(),
     description: z.string(),
-    icon: z.string(),
+    icon: z.string().optional(),
     tag: z.string().optional(),
     date: z.date().optional(),
   }),
