@@ -5,9 +5,10 @@
   "scripts": {
     "dev": "astro dev",
     "start": "astro dev",
-    "build": "astro build && pagefind --site dist",
+    "build": "node scripts/build-redirect-shell.mjs",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "build:astro": "astro build && pagefind --site dist"
   },
   "dependencies": {
     "@astrojs/mdx": "^8.0.0",

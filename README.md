@@ -1,10 +1,22 @@
 # Software Engineering 3.0
 
+> **Migrato su [formray.io/blog](https://formray.io/blog).**
+>
+> Software Engineering 3.0 è diventato l'imprint editoriale del blog di
+> Formray. Tutti i contenuti — dispense, articoli e guide — vivono ora su
+> **[formray.io/blog](https://formray.io/blog)** con gli stessi slug
+> (`/blog/dispense/…`, `/blog/articles/…`, `/blog/guides/…`).
+>
+> Questo repository è archiviato: GitHub Pages continua a servire una
+> shell di redirect permanenti verso i nuovi URL
+> (`npm run build` → `scripts/build-redirect-shell.mjs`).
+> La build Astro originale resta disponibile come `npm run build:astro`.
+
+---
+
+## Archivio storico
+
 Dispense, articoli e guide sul mondo dello sviluppo software nell'era dell'AI. In italiano.
-
-## Live Site
-
-**[https://formray.github.io/software-engineering-3.0](https://formray.github.io/software-engineering-3.0)**
 
 ## Sviluppo Locale
 
