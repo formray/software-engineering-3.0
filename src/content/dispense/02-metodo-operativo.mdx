@@ -1,0 +1,352 @@
+---
+title: "Metodo operativo"
+description: "Sei pratiche in quattro settimane, applicate a un caso di studio unico che attraversa tutta la dispensa: una API Express reale. Ogni concetto della Mappa produce un artefatto concreto, mostrato per esteso."
+order: 2
+argomento: "Metodo"
+date: 2026-08-20
+---
+
+*Prerequisiti: la [Dispensa 00 (La Mappa)](/software-engineering-3.0/dispense/00-la-mappa/) e un coding agent già in uso · Agosto 2026.*
+
+<p class="part">Parte I · Fondazioni</p>
+
+## 1. Il principio: un concetto, un artefatto
+
+Questo campo si presta allo studio passivo: c'è sempre un altro articolo, un altro paper, un'altra newsletter. È possibile passare sei mesi a leggere e trovarsi al punto di partenza, con più vocabolario e le stesse abitudini di lavoro.
+
+Il metodo di questa dispensa si fonda su una regola sola: **ogni concetto studiato deve produrre un artefatto nel repository** — un file con un nome, una posizione e una data di revisione. Se un concetto non ha prodotto un artefatto, non è stato messo in pratica. La corrispondenza completa:
+
+| Concetto (dalla Mappa) | Artefatto | Posizione |
+|---|---|---|
+| Prompt engineering (L1) | Specifiche versionate | `specs/*.md` |
+| Context engineering (L2) | Playbook a regole numerate | `CLAUDE.md` |
+| Tool e skill (L3) | Cartelle con `SKILL.md` | `.claude/skills/` |
+| Harness (L4) | Configurazione e permessi | `.claude/`, `.mcp.json` |
+| Loop engineering (L5) | Script del ciclo e registri | `loop/`, `.loop/trace.jsonl` |
+| Valutazione (trasv. A) | Golden set e gate in CI | `evals/` |
+| Sicurezza (trasv. B) | Checklist e regole sui permessi | `SECURITY.md` |
+
+<figure>
+<div class="arc">
+  <div class="week"><span>W0</span><b>Fondamenta</b>Verifier funzionante, struttura dei file</div>
+  <div class="week"><span>W1</span><b>Spec e playbook</b>Pratiche 1–2 su cinque compiti reali</div>
+  <div class="week"><span>W2</span><b>Il primo ciclo</b>Prima manuale, poi con gli arresti</div>
+  <div class="week"><span>W3</span><b>Skill e golden set</b>Due skill estratte, venti casi raccolti</div>
+  <div class="week"><span>W4</span><b>Routine</b>Cadenza settimanale attiva, prime metriche</div>
+</div>
+<figcaption>Il programma delle quattro settimane. Al termine, la pratica è autosufficiente: la mantiene la routine del §10, con un costo di 90 minuti a settimana.</figcaption>
+</figure>
+
+## 2. Il caso di studio: orders-api
+
+Tutti gli esempi della dispensa provengono da un unico caso di studio, scelto perché rappresenta il lavoro quotidiano di un backend developer e non un esercizio accademico: **orders-api**, una API REST per la gestione di ordini — Node.js, Express, MongoDB con Mongoose.
+
+```text
+orders-api/
+├── src/
+│   ├── routes/orders.routes.js     # definizione delle route
+│   ├── controllers/                # logica di richiesta/risposta
+│   ├── services/                   # logica di business
+│   ├── schemas/                    # schemi di validazione input
+│   └── middleware/validate.js      # validazione centralizzata
+├── tests/                          # Jest + supertest, DB in memoria
+├── specs/                          # pratica 1
+├── evals/golden.jsonl              # pratica 5
+├── .claude/skills/                 # pratica 4
+├── .loop/trace.jsonl               # pratica 3 (versionato)
+├── CLAUDE.md                       # pratica 2
+└── SECURITY.md                     # pratica 6
+```
+
+Il compito che seguiremo dall'inizio alla fine, introdotto già nel §12 della Mappa: **aggiungere paginazione e filtro per stato a `GET /orders`**. È un compito da mezza giornata, del tipo che si presenta ogni settimana: abbastanza semplice da essere seguibile, abbastanza reale da esporre tutti i problemi tipici.
+
+Per applicare il metodo al proprio lavoro vale una regola di selezione: **un repository reale ma a basso rischio**. Reale, perché senza attrito vero — dipendenze, test che falliscono, storia git — non si impara nulla; a basso rischio, perché i primi cicli falliranno in modi istruttivi, e le lezioni istruttive non devono arrivare in produzione.
+
+## 3. Settimana zero: il verifier
+
+Il *verifier* è il controllore automatico del repository: l'insieme dei comandi che stabiliscono, senza intervento umano e senza ambiguità, se il codice è in uno stato accettabile. In orders-api:
+
+```json
+"scripts": {
+  "lint":      "eslint src/ tests/",
+  "typecheck": "tsc --noEmit",
+  "test":      "jest --coverage",
+  "verify":    "npm run lint && npm run typecheck && npm test && npm audit --audit-level=high"
+}
+```
+
+La settimana zero è dedicata quasi interamente a questo, e la sproporzione è voluta. Ogni pratica successiva chiude un ciclo su questo segnale: la specifica dichiara criteri che il verifier controlla (§4), il ciclo si arresta quando il verifier passa (§6), il golden set è il verifier per la parte non deterministica (§8). Un verifier debole rende cieco tutto il resto; senza di esso, ogni valutazione del lavoro dell'agente è una sensazione. **Senza misura, il resto del metodo è superstizione.**
+
+#### Condizioni di uscita dalla settimana zero
+
+<ul class="check">
+<li><code>npm run verify</code> esiste, termina con exit code, e dà lo stesso esito in locale e in CI.</li>
+<li><code>CLAUDE.md</code> esiste ed è sotto le 150 righe (struttura al §5).</li>
+<li>La cartella <code>.loop/</code> esiste ed è versionata: i registri delle esecuzioni sono documentazione, non file temporanei.</li>
+<li><code>SECURITY.md</code> elenca ciò che l'agente non può toccare (§9).</li>
+</ul>
+
+<p class="part">Parte II · Le sei pratiche</p>
+
+## 4. Pratica 1 — La specifica
+
+La prima pratica sostituisce il prompt usa-e-getta con la **specifica**: un file markdown versionato che descrive il compito. Rispetto a un prompt lungo cambiano due proprietà: la specifica sopravvive alla sessione (si ritrova, si migliora, si riusa), e contiene **criteri di accettazione verificabili a macchina**. La specifica del compito di studio, per esteso:
+
+```markdown
+# specs/2026-08-orders-pagination.md
+
+## Obiettivo
+Aggiungere a GET /orders: paginazione (`page`, `limit`) e
+filtro per stato (`status`), combinabili.
+
+## Fuori scope
+- Non modificare lo schema Mongoose di Order.
+- Non toccare gli altri endpoint.
+
+## Vincoli
+- `limit` default 20, massimo 100.
+- Diff complessivo sotto le 300 righe; se non bastano,
+  fermarsi e proporre la suddivisione del lavoro.
+- Nessuna dipendenza nuova.
+
+## Criteri di accettazione (verificabili a macchina)
+- [ ] `npm run verify` passa.
+- [ ] Test supertest per: pagina valida, `page=0` (400),
+      `limit=200` → 100, `status` inesistente → lista vuota,
+      paginazione+filtro combinati.
+- [ ] La risposta include `total`, `page`, `limit`.
+- [ ] `grep -rn "req.query" src/controllers/` non trova nulla:
+      i query param passano dallo schema in `schemas/`.
+
+## Budget
+Massimo 3 iterazioni di ciclo, poi il compito torna alla persona.
+```
+
+Il criterio con `grep` merita attenzione, perché contiene il principio dell'intera dispensa in miniatura: è un controllo che una persona esegue in un secondo e che l'agente non può soddisfare a parole. Se `req.query` compare ancora nei controller, la validazione non è passata dallo schema — indipendentemente da quanto l'agente dichiari il contrario. Più criteri di questa natura contiene la specifica, meno tempo la review spende sulla meccanica, e più ne resta per ciò che i controlli non vedono: l'architettura.
+
+<div class="box human-box">
+  <span class="label">Esercizio della settimana 1</span>
+  <p>Prendere i prossimi cinque compiti reali che si sarebbero assegnati all'agente a voce e scriverli come specifica prima di aprire la sessione, con un limite di dieci minuti l'una. Se una specifica richiede più di dieci minuti, il compito è sovradimensionato e va suddiviso: anche questa è un'informazione, ottenuta prima di aver speso una sola iterazione.</p>
+</div>
+
+## 5. Pratica 2 — Il playbook di contesto
+
+Il file `CLAUDE.md` (o `AGENTS.md`, secondo lo strumento) non è documentazione: è **il contesto permanente che ogni sessione eredita**. Ogni sua riga occupa la finestra del modello a ogni turno, e va quindi gestito come un'interfaccia pubblica: piccolo, preciso, revisionato.
+
+Il formato raccomandato deriva da una linea di ricerca sul contesto auto-migliorante (ACE, *Agentic Context Engineering*), il cui risultato principale è questo: un contesto che viene riscritto per intero a ogni aggiornamento degenera — a ogni riscrittura qualcosa si perde o si annacqua. La forma stabile è l'elenco di **regole brevi, numerate, che si aggiungono e si deprecano ma non si riscrivono**. Il playbook di orders-api:
+
+```markdown
+# CLAUDE.md — playbook di progetto (revisione: venerdì, §10)
+
+## Regole (aggiungere o deprecare; mai riordinare o riscrivere)
+
+- [R-001] Package manager: npm. Mai yarn o pnpm.
+- [R-002] I test usano mongodb-memory-server, mai l'istanza locale.
+- [R-003] La validazione degli input passa da middleware/validate.js
+  con schema in schemas/. Mai validazione inline nei controller.
+- [R-004] Gli errori HTTP rispondono in formato problem+json.
+- [R-005] DEPRECATA il 2026-08-21, sostituita da R-006.
+- [R-006] Le date si gestiscono con Temporal; utils/date.js è legacy
+  e non va usato nel codice nuovo.
+
+## Comandi
+- verifica completa:  npm run verify
+- un solo test:       npm test -- --grep "nome"
+```
+
+Gli identificatori rendono le regole *citabili*: nei registri delle esecuzioni si annota «violata R-003», e la revisione settimanale lavora su riferimenti precisi anziché su impressioni. La deprecazione esplicita, al posto della cancellazione, conserva la storia: le regole morte indicano quali problemi si è già tentato di risolvere a parole — di norma, sono i candidati a diventare controlli automatici nel verifier.
+
+Al playbook si affiancano tre norme di igiene del contesto, in ordine di impatto:
+
+1. **Una sessione, un compito.** La sessione prolungata che attraversa argomenti diversi accumula nel contesto materiale non pertinente, da cui il modello attinge. È la prima causa di risposte sicure e sbagliate.
+2. **Le decisioni vivono su file.** Una scelta che esiste solo nella conversazione non esiste per la sessione successiva. Al termine di ogni discussione rilevante, l'agente ne scrive l'esito in un file di progetto.
+3. **Compressione manuale ai punti di svolta.** Quando la finestra si avvicina al limite, l'ambiente riassume automaticamente la conversazione, decidendo da sé cosa scartare. La contromisura: anticiparlo, facendo scrivere all'agente un riassunto di stato su file e ripartendo da contesto pulito.
+
+## 6. Pratica 3 — Il primo ciclo
+
+Un ciclo (loop), nella definizione della Mappa, è il sistema che assegna i compiti all'agente e ne verifica il risultato con un criterio indipendente dall'agente stesso. La pratica inizia dalla forma minima, per una ragione didattica precisa: le due decisioni di progetto che contano sono visibili solo nella versione nuda.
+
+### 6.1 La forma minima
+
+```bash
+# loop/ralph.sh — un compito per iterazione, contesto azzerato a ogni iterazione
+while ! ./loop/done.sh; do
+  claude --print \
+    "$(cat specs/2026-08-orders-pagination.md)
+     Scegli UN criterio di accettazione non ancora soddisfatto,
+     implementalo, esegui 'npm run verify', committa se passa."
+done
+```
+
+Le due decisioni. Prima: a ogni iterazione l'agente riparte da zero e rilegge l'intera specifica — nessuna memoria della conversazione precedente. L'apparente spreco previene il degrado del contesto descritto al §5. Seconda: la condizione di arresto è `done.sh` — il verifier più i criteri della specifica — e mai la dichiarazione dell'agente. Lasciata a lui, la chiusura arriva regolarmente su lavoro incompleto, in perfetta buona fede.
+
+### 6.2 Una esecuzione reale, iterazione per iterazione
+
+L'esecuzione del compito di studio, come appare nel registro. È rappresentativa: la prima iterazione fallisce sulla logica, la seconda sulle convenzioni, la terza chiude.
+
+```json
+// .loop/trace.jsonl (estratto, campi ridotti per leggibilità)
+{"iter":1, "esito":"fail", "gate":"test",
+ "nota":"2 test rossi: page=0 restituisce 200 invece di 400 (off-by-one)"}
+{"iter":2, "esito":"fail", "gate":"grep req.query",
+ "nota":"test verdi, ma query param letti nel controller: violata R-003"}
+{"iter":3, "esito":"pass",
+ "nota":"schema orders.query.js aggiunto, tutti i criteri soddisfatti"}
+```
+
+Tre osservazioni sull'esecuzione, perché contengono il metodo:
+
+- Il fallimento dell'iterazione 1 viene reinserito nel prompt dell'iterazione 2 come dato («i test X e Y falliscono con questo output»), non come conversazione: il ciclo trasporta *evidenza*, non chiacchiere.
+- Il fallimento dell'iterazione 2 è il più istruttivo: i test passavano, e senza il criterio con il grep la violazione di R-003 sarebbe arrivata in review — o oltre. È il criterio a macchina che l'ha fermata, gratuitamente.
+- Quella stessa violazione non si butta: al §8 diventa il caso G-001 del golden set. Il ciclo produce i materiali della propria valutazione.
+
+### 6.3 La forma completa
+
+Vista la forma minima all'opera, si passa alla versione con: ambienti isolati per iterazione (git worktree), i tre arresti obbligatori — massimo iterazioni, assenza di progresso misurata sui test e non sulle dichiarazioni, budget in valuta — e l'*escalation*, il passaggio del compito alla persona con l'evidenza allegata (registro, ultimo diff, gate fallito). L'implementazione completa in Node è nel §7 della dispensa [Harness & Loop Engineering](/software-engineering-3.0/dispense/01-harness-loop-engineering/).
+
+<div class="box warn">
+  <span class="label">Regola d'ingaggio</span>
+  <p>Il ciclo schedulato — avviato da cron o da un evento, senza persona presente — si adotta solo dopo aver osservato almeno una volta arresti ed escalation funzionare dal vivo. Un ciclo notturno con arresti mai collaudati non è automazione: è un generatore di incidenti differiti.</p>
+</div>
+
+## 7. Pratica 4 — Le skill
+
+Una skill è conoscenza procedurale in forma di file: non cosa l'agente può fare, ma come si fa correttamente in questo repository. Il criterio di estrazione è lo stesso del refactoring: **alla terza ripetizione**. La terza volta che si spiega all'agente la medesima procedura, la spiegazione smette di essere un messaggio e diventa un file. In orders-api, dopo tre endpoint aggiunti:
+
+```markdown
+# .claude/skills/express-endpoint/SKILL.md
+---
+name: express-endpoint
+description: Aggiunge un endpoint a questa API Express.
+  Usare per ogni richiesta di nuova route o modifica di route.
+---
+
+## Procedura
+1. Route in src/routes/, controller separato, logica nel service.
+2. Schema di validazione in schemas/, agganciato via
+   middleware/validate.js (regola R-003). Mai validazione inline.
+3. Errori in formato problem+json (R-004).
+4. Test d'integrazione con supertest in tests/, DB in memoria (R-002):
+   almeno un caso valido, uno di input errato, uno di caso limite.
+
+## Verifica della skill
+Input di prova in ./fixtures/, esito atteso descritto in ./expected.md.
+Rieseguire la verifica a ogni cambio di modello.
+```
+
+Tre norme, più importanti della sintassi. Primo: **una skill è codice che viene eseguito senza revisione** — un errore al suo interno si replica a ogni invocazione, in silenzio; va quindi versionata e dotata di una verifica, anche minima. Secondo: va rivista a ogni cambio di modello, perché modelli diversi interpretano le stesse istruzioni in modo diverso. Terzo: poche e brevi — l'esperienza di campo del 2026 documenta che la proliferazione di skill degrada il sistema quanto la loro assenza.
+
+## 8. Pratica 5 — Il golden set
+
+Per la valutazione non serve una piattaforma: serve un **golden set** — una raccolta di casi di riferimento estratti dai fallimenti reali — e un controllo che lo esegue. Il metodo:
+
+1. Per due settimane, ogni errore *di giudizio* dell'agente (non i refusi) viene registrato in trenta secondi: richiesta, comportamento osservato, comportamento atteso, causa presunta.
+2. Ogni caso diventa una riga di un file JSONL. I primi tre casi di orders-api, tutti provenienti da esecuzioni reali:
+
+```json
+// evals/golden.jsonl
+{"id":"G-001",
+ "input":"Aggiungi la validazione dei query param a GET /orders",
+ "deve":["schema in schemas/","aggancio via middleware/validate.js"],
+ "nonDeve":["leggere req.query nei controller","dipendenze nuove"],
+ "origine":"trace 2026-08-20, iter 2: validazione inline, violata R-003"}
+{"id":"G-002",
+ "input":"Aggiungi il campo consegna stimata alla risposta dell'ordine",
+ "deve":["date calcolate con Temporal (R-006)"],
+ "nonDeve":["uso di utils/date.js","new Date su stringhe"],
+ "origine":"sessione 2026-08-21: usato il modulo legacy deprecato"}
+{"id":"G-003",
+ "input":"Scrivi i test per il service degli ordini",
+ "deve":["mongodb-memory-server (R-002)","pattern AAA come in tests/"],
+ "nonDeve":["connessione all'istanza Mongo locale"],
+ "origine":"trace 2026-08-22: test scritti contro il DB locale"}
+```
+
+3. Il controllo che esegue i casi rivela una proprietà utile: circa metà dei criteri è verificabile in modo deterministico — un grep, un controllo sul filesystem — a costo zero. Per l'altra metà si può impiegare un modello come giudice, con la consapevolezza delle sue distorsioni note (preferenza per le risposte prolisse, per la prima alternativa), e solo dove il controllo deterministico non arriva.
+4. Il tasso di successo sul golden set entra tra i controlli del verifier. Da quel momento, ogni cambiamento rilevante — modello nuovo, modifica al playbook, modifica a una skill — viene misurato eseguendo i casi *prima* e *dopo*: la differenza tra i due numeri è la regressione, quantificata anziché percepita.
+
+<div class="box key">
+  <span class="label">Il concetto sotto la pratica</span>
+  <p>È eval-driven development in scala minima: la suite costruita sui fallimenti reali diventa il criterio di rilascio. Poiché i modelli sottostanti cambiano ogni poche settimane, il golden set è l'unico strumento che misura l'effetto del cambiamento <em>sul proprio lavoro</em>, anziché sul benchmark di qualcun altro.</p>
+</div>
+
+## 9. Pratica 6 — La sicurezza
+
+Il fondamento teorico è nel §10 della Mappa: un modello non distingue in modo affidabile le istruzioni dai dati, e il problema non si corregge con prompt più severi — si contiene con l'architettura. Lo strumento operativo è la verifica della *lethal trifecta*, da eseguire **prima di attivare qualunque automazione**:
+
+<ul class="check">
+<li>L'automazione accede a dati privati? (repository privati, database, credenziali)</li>
+<li>Elabora contenuti non controllati da chi la gestisce? (issue di esterni, pagine web, allegati, dipendenze)</li>
+<li>Può comunicare verso l'esterno? (push, chiamate di rete, email — conta anche la sola resa di un link)</li>
+</ul>
+
+**Applicazione al caso di studio.** Si supponga di voler estendere orders-api con un'automazione realistica: un ciclo notturno che legge le issue aperte dagli utenti e prepara pull request di correzione. Verifica: accede al repository privato (sì); legge testo scritto da sconosciuti nelle issue (sì); apre PR e può fare richieste di rete (sì). Tre affermazioni: il sistema è vulnerabile per costruzione — chiunque apra una issue può, in linea di principio, dirigerne il comportamento. La mitigazione non è un avvertimento nel prompt, ma la rimozione di una delle tre proprietà; la più praticabile è di norma la terza: rete limitata a una lista di destinazioni approvate, e PR in modalità bozza con approvazione umana obbligatoria.
+
+Le regole permanenti, da fissare una volta in `SECURITY.md`:
+
+- Verifier, registri e configurazione del modello sono in sola lettura per l'agente. La ragione è stata vista al §6: ogni ottimizzatore, prima o poi, scopre che disattivare un controllo è più economico che superarlo.
+- Permessi per operazione, non account di servizio ad ampio raggio: l'identità che apre le PR non è quella che può unirle.
+- Le credenziali non transitano mai dal contesto: l'agente invoca comandi che le usano, senza leggerle.
+- Il codice generato a partire da input non fidato viene eseguito in sandbox, non nell'ambiente di sviluppo.
+
+<p class="part">Parte III · Il regime</p>
+
+## 10. La routine settimanale
+
+Una pratica non si mantiene con l'intenzione: si mantiene con un appuntamento fisso. Il regime a pieno funzionamento richiede novanta minuti a settimana, in tre momenti:
+
+| Momento | Attività | Durata |
+|---|---|---|
+| Lunedì | **Lettura dei registri** (`trace.jsonl`) della settimana, cercando pattern e non episodi. Cautela metodologica: due fallimenti identici in superficie — stesso gate, stesso esito — possono avere cause diverse; la classificazione si fa sulla causa. | 30′ |
+| Mercoledì | **Un intervento, uno solo.** Il pattern più ricorrente tra quelli risolvibili con una modifica circoscritta diventa: una regola del playbook, o una skill, o un caso del golden set. L'intervento si accompagna a una previsione scritta: quale metrica dovrebbe migliorare, e di quanto. | 30′ |
+| Venerdì | **Verifica della previsione** della settimana precedente: se confermata, l'intervento resta; se smentita, si depreca annotando il motivo. Aggiornamento delle cinque metriche (§12). | 30′ |
+
+Questa struttura non è una convenzione di comodo: è il ciclo *proponi–valuta–accetta* documentato nella ricerca sui sistemi auto-miglioranti (individuazione dei punti deboli, modifica circoscritta, verifica di non regressione), eseguito manualmente — con la persona come proponente e la settimana come iterazione. È anche il percorso di apprendistato corretto: dopo un mese di routine fluida si sa con precisione quali fasi delegare a un agente. L'analisi dei registri per prima; la decisione su cosa modificare per ultima.
+
+## 11. L'autonomia per tipo di compito
+
+Il livello di autonomia concesso all'agente non è una preferenza generale: si regola **per tipo di compito**, e si alza soltanto in presenza di evidenza accumulata. La tabella di riferimento, con le soglie:
+
+| Tipo di compito | Livello di autonomia | Evidenza richiesta per salire |
+|---|---|---|
+| Formattazione, rename, manutenzione | Ciclo schedulato, merge automatico | 20 esecuzioni consecutive senza incidenti |
+| Bug con test di riproduzione | Ciclo autonomo, review del diff finale | Oltre il 70% dei compiti del tipo chiuso alla prima iterazione |
+| Funzionalità con specifica | Ciclo supervisionato, review completa | Golden set stabile attraverso tre cambi di modello |
+| Architettura, sicurezza, migrazioni di dati | Sessione interattiva, guida umana | Non si sale: è il livello della responsabilità |
+| Territorio nuovo (libreria o dominio mai usati) | Interattiva, a incrementi piccoli | Riclassificabile come «funzionalità con specifica» dopo cinque compiti riusciti |
+
+<div class="box human-box">
+  <span class="label">Il vincolo di fondo</span>
+  <p>L'osservazione più solida emersa dai team con maggiore esperienza di automazione è che il collo di bottiglia non è la capacità dell'agente: è la capacità umana di revisione. Ogni incremento di autonomia va quindi accompagnato da evidenza più leggibile in review — criteri a macchina, registri, diff contenuti. Alzare l'autonomia senza migliorare l'evidenza non accelera il lavoro: accumula debito di comprensione.</p>
+</div>
+
+## 12. Le cinque metriche
+
+Cinque numeri, un file (`.loop/metrics.md`), aggiornati il venerdì. Tutti ricavabili dai registri, nessuno richiede strumenti aggiuntivi.
+
+1. **Tasso di successo alla prima iterazione** — la percentuale di compiti in cui il verifier passa al primo tentativo. Misura la qualità congiunta di specifiche e playbook: se si scrive bene cosa si vuole, l'agente arriva prima.
+2. **Iterazioni medie per compito chiuso** — se cresce nel tempo, gli interventi del mercoledì non stanno producendo effetto, e va indagato il perché.
+3. **Tasso di escalation** — la percentuale di cicli che tornano alla persona. La lettura è a intervallo: zero indica compiti troppo facili o arresti troppo permissivi; oltre il 30% indica automazione di compiti non maturi. La salute sta nel mezzo.
+4. **Costo per compito chiuso**, in valuta — l'unico numero che risponde alla domanda economica: il ciclo conviene rispetto al lavoro diretto?
+5. **Minuti di review per cento righe di diff** — la metrica di guardia, da leggere al contrario delle altre: un crollo rapido non indica maggiore abilità, indica che si è smesso di leggere. È il meccanismo con cui, gradualmente, un repository cessa di appartenere a chi lo firma.
+
+<p class="part">Parte IV · Gli errori</p>
+
+## 13. Dieci errori di messa in pratica
+
+<ol class="mistakes">
+<li><strong>Partire dagli strumenti anziché dal verifier.</strong> Installare framework di orchestrazione prima di avere <code>npm run verify</code> significa costruire cicli che non possono sapere se stanno funzionando.</li>
+<li><strong>Fare pratica sul repository di produzione.</strong> I primi cicli falliscono in modi istruttivi; le lezioni istruttive vanno raccolte dove non producono danni.</li>
+<li><strong>Scrivere la specifica a posteriori, «per documentare».</strong> La specifica scritta prima cambia il comportamento del ciclo; quella scritta dopo è un verbale. Utile, ma è un altro oggetto.</li>
+<li><strong>Lasciare che il playbook diventi un deposito.</strong> Cresce a ogni frustrazione e non viene mai potato. Il limite di righe e la revisione del venerdì servono a questo; una regola sistematicamente ignorata non va riscritta con più enfasi — va trasformata in un controllo del verifier.</li>
+<li><strong>Saltare la forma minima del ciclo.</strong> Adottare il runner completo senza aver osservato tre iterazioni nude priva dell'intuizione su come i cicli falliscono; il debugging del runner, senza quell'intuizione, costa il doppio.</li>
+<li><strong>Costruire il golden set a tavolino.</strong> Otto casi estratti da errori reali valgono più di venti immaginati: i modelli non sbagliano dove ci si aspetta che sbaglino.</li>
+<li><strong>Tre interventi nella stessa settimana.</strong> Modificando playbook, skill e specifiche insieme, il venerdì non è attribuibile alcun effetto. Un intervento, una previsione, una verifica.</li>
+<li><strong>Skill senza verifica.</strong> Una skill errata è un difetto che si replica a ogni invocazione, silenziosamente.</li>
+<li><strong>Eseguire la verifica di sicurezza una sola volta.</strong> Ogni tool, connettore o fonte di contenuto aggiunta riapre la verifica della trifecta: la superficie d'attacco cambia con la configurazione.</li>
+<li><strong>Misurare la produttività e ignorare la review.</strong> Righe generate e compiti chiusi crescono da soli. La quinta metrica — quanto si sta effettivamente leggendo — è quella che stabilisce se, a distanza di un anno, il repository appartiene ancora a chi lo mantiene.</li>
+</ol>
+
+---
+
+*Dispensa · Serie AI Engineering · agosto 2026 — Dispense collegate: [La Mappa](/software-engineering-3.0/dispense/00-la-mappa/) (il quadro dei concetti) e [Harness & Loop Engineering](/software-engineering-3.0/dispense/01-harness-loop-engineering/) (l'implementazione completa del ciclo, §7).*
