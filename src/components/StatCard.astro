@@ -10,11 +10,11 @@ interface Props {
 const { stats } = Astro.props;
 
 const colorMap = {
-  blue: 'var(--accent-blue)',
-  green: 'var(--accent-green)',
-  red: 'var(--accent-red)',
-  orange: 'var(--accent-orange)',
-  purple: 'var(--accent-purple)',
+  blue: 'var(--accent-deep)',
+  green: 'var(--ok)',
+  red: 'var(--danger)',
+  orange: 'var(--warn)',
+  purple: 'var(--ink-2)',
 };
 ---
 
@@ -33,33 +33,29 @@ const colorMap = {
   .stat-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 1.25rem;
+    gap: 1rem;
     margin: 1.5rem 0;
   }
 
   .stat-item {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    padding: 1.5rem;
-    text-align: center;
-    transition: all 0.2s ease;
-  }
-
-  .stat-item:hover {
-    border-color: var(--accent-blue);
-    transform: translateY(-2px);
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 0;
+    padding: 1.4rem 1.2rem;
+    text-align: left;
   }
 
   .stat-value {
+    font-family: var(--serif);
     font-size: 2rem;
-    font-weight: 700;
-    line-height: 1.2;
+    font-weight: 500;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
   }
 
   .stat-label {
-    color: var(--text-secondary);
-    font-size: 0.9rem;
-    margin-top: 0.5rem;
+    color: var(--ink-2);
+    font-size: 0.85rem;
+    margin-top: 0.45rem;
   }
 </style>

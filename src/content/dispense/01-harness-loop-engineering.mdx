@@ -1,0 +1,407 @@
+---
+title: "Harness & Loop Engineering"
+description: "Il sistema attorno al modello: pattern di design dell'harness, la scala dei cinque loop, e come si costruisce un outer loop che non deraglia."
+order: 1
+argomento: "Harness & Loop"
+date: 2026-08-16
+---
+
+*Stato dell'arte ad agosto 2026 · Fonti primarie: Lilian Weng (Lil'Log, 4 luglio 2026), O'Reilly Radar (29 luglio 2026), AI Engineer World's Fair 2026.*
+
+## 1. Perché il baricentro si è spostato
+
+Nel 2023 la domanda era «gli LLM riescono a comportarsi da agenti?». Nel 2026 la risposta è sì, e la domanda è diventata un'altra: **com'è fatto il sistema che li tiene sui binari?**
+
+Il segnale più netto è la distanza fra due saggi della stessa autrice. Nel 2023 Lilian Weng descriveva un agente come *LLM + memoria + tool + planning*. Nel luglio 2026 pubblica *Harness Engineering for Self-Improvement*, dove l'oggetto di studio non è più l'agente ma lo strato che lo circonda: workflow, controllo dei permessi, gestione dello stato persistente, valutazione.
+
+<div class="box key">
+  <span class="label">La tesi</span>
+  <p>Lo strato fra il modello grezzo e il contesto reale conta quanto l'intelligenza grezza del modello. Un harness ben progettato può migliorare le prestazioni di un agente quanto — o più di — un passaggio a un modello più forte.</p>
+</div>
+
+Questa non è una posizione accademica. All'AI Engineer World's Fair di fine giugno il termine dominante del palco principale era «loop», e il 2 luglio la conferenza si è chiusa con un'ora di dibattito su quanto l'entusiasmo sui loop abbia superato la disciplina ingegneristica. Nel frattempo Anthropic dichiara che il 65% del codice del suo team di prodotto è prodotto dalla versione interna di Claude Tag, e riferisce che il collo di bottiglia è diventato la capacità umana di rivedere e concettualizzare ciò che il sistema sta facendo.
+
+Per chi arriva dal paradigma «AI genera → umano verifica», il salto è questo: **non stai più verificando output, stai progettando il meccanismo che genera e verifica**. La leva si sposta dalla qualità del singolo prompt al design del sistema che produce i prompt.
+
+## 2. Definizione: cos'è un harness
+
+Un **harness** è il sistema che circonda un modello base e orchestra l'esecuzione: decide come il modello pensa e pianifica, quali tool chiama, come percepisce e gestisce il contesto, dove salva gli artefatti, come vengono valutati i risultati.
+
+Rispetto alla definizione del 2023, l'harness aggiunge quattro cose che il framework di agente non aveva:
+
+| Componente | Agent framework 2023 | Harness 2026 |
+|---|---|---|
+| Prompt | Template statico | Contesto strutturato, costruito a runtime |
+| Memoria | Buffer conversazionale + vector store | Filesystem come stato durevole |
+| Workflow | Chain / grafo fisso | Loop progettato, con condizione d'uscita esplicita |
+| Permessi | — | Superfici editabili e read-only dichiarate |
+| Valutazione | Fuori dal sistema | Dentro il loop, come segnale di chiusura |
+| Parallelismo | — | Subagent + job in background ispezionabili |
+
+L'analogia che Weng usa è con un sistema operativo: come un OS, un harness deve incapsulare logica complicata mantenendo un'interfaccia semplice. E come per un OS, ci si aspetta che config, interfacce dei tool e protocolli si standardizzino gradualmente attraverso l'industria — cosa che sta già succedendo con MCP e con il formato skill.
+
+<div class="box key">
+  <span class="label">Principio di design</span>
+  <p>Il design dovrebbe essere deliberatamente semplice e generico, con riferimento alle pratiche di software engineering esistenti. Non perché sia elegante: perché il modello è stato pre-addestrato su quelle pratiche e le riconosce. Un harness che assomiglia a un progetto Unix normale funziona meglio di uno che inventa astrazioni proprie.</p>
+</div>
+
+## 3. Tre pattern di design
+
+### 3.1 Workflow automation
+
+Definire un workflow in cui il modello può operare, testare e iterare. La forma canonica è un loop orientato all'obiettivo: `plan → execute → observe/test → improve → execute`, *finché* l'obiettivo non è raggiunto. Il processo può interrompersi per chiedere chiarimenti all'umano sulla specifica o sulle preferenze di esecuzione.
+
+Il punto non ovvio: il grafo deve permettere al modello di **analizzare le proprie traiettorie e i propri fallimenti**, non solo di rieseguire. La differenza fra un agent runtime e un template di prompt è tutta qui.
+
+### 3.2 Il filesystem come memoria persistente
+
+In un rollout lungo, gli artefatti — log degli esperimenti, diff, error trace, traiettorie passate — crescono ben oltre la finestra di contesto su cui il modello è stato addestrato. L'harness non deve trasportare l'intero workflow in contesto: deve tenere lo stato durevole **su file**.
+
+<div class="box key">
+  <span class="label">Perché proprio i file</span>
+  <p>Leggere, scrivere ed editare il filesystem via <code>bash</code> è una competenza fondamentale degli LLM. Gestire la memoria persistente in forma di file beneficia automaticamente di ogni miglioramento del modello base, senza che tu debba riscrivere niente. Ogni astrazione di memoria proprietaria che costruisci, invece, invecchia da sola.</p>
+</div>
+
+### 3.3 Subagent e job in background
+
+L'harness può generare più subagent in parallelo e monitorare job in background: utile per esplorare più ipotesi, eseguire esperimenti concorrenti, o delegare sottocompiti isolati **senza inquinare il contesto principale**. L'agente padre diventa un piccolo process manager: lancia job, ispeziona log, cancella run fallite, unisce i risultati.
+
+La scelta di design chiave è rendere il parallelismo **esplicito e ispezionabile**. Se l'output dei subagent vive solo in un contesto di chat transitorio, diventa rapidamente obsoleto e invisibile. Se vive come file, log e record di stato, il modello può recuperare dopo un'interruzione e ragionare sulla propria storia di esecuzione.
+
+#### Il set di tool di un coding agent harness
+
+L'interfaccia si è stabilizzata fra Claude Code, Codex, OpenCode e gli agenti stile Cursor. Vale la pena conoscerla come si conosce una API: è il vocabolario dentro cui progetterai.
+
+| Gruppo | Tool |
+|---|---|
+| Filesystem | `glob`, `grep`, `ls`, `read`, `write`, `edit` (match esatto), `multi_edit`, `apply_patch` |
+| Shell | `bash`, `PowerShell` |
+| IO / VCS | `lsp`, `git_status`, `git_diff`, `git_commit` |
+| Contesto esterno | tool MCP, skill |
+| Web | `web_search`, `web_fetch`, tool browser |
+| Processi | `CronCreate`, `CronDelete`, `CronList` |
+| Delega | `spawn_agent`, `resume_agent`, `wait_agent`, `interrupt_agent`, `close_agent` |
+
+## 4. La scala dei cinque loop
+
+«Loop» a metà 2026 significa almeno quattro cose diverse, più una quinta che nessuno aveva ancora nominato. Laurie Voss ne ha fatto la mappa su O'Reilly Radar a fine luglio: è la tassonomia più utile in circolazione, perché ogni loop ha un **oggetto su cui itera** e una **condizione che lo chiude**. Se non sai nominare entrambe, non stai costruendo un loop: stai costruendo un `while(true)`.
+
+<figure>
+<div class="stack">
+  <div class="ring-name"><span>L5 · Oversight loop</span><span>umano · nessuna uscita</span></div>
+  <div class="ring">
+    <div class="ring-name"><span>L4 · System loop (autoresearch)</span><span>chiude su: eval e giudici</span></div>
+    <div class="ring">
+      <div class="ring-name"><span>L3 · Product loop (software factory)</span><span>chiude su: segnali esterni</span></div>
+      <div class="ring">
+        <div class="ring-name"><span>L2 · Task loop (Ralph)</span><span>chiude su: spec + test</span></div>
+        <div class="ring">
+          <div class="ring-name"><span>L1 · Execution loop</span><span>chiude su: feedback ambiente</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<figcaption>Lo stack dei loop. Ogni anello contiene quello sotto e ne verifica l'output — l'anello esterno esiste proprio perché quello interno dichiara «fatto» quando gli pare. L'anello ocra è l'unico dove dovrebbe stare stabilmente una persona.</figcaption>
+</figure>
+
+| Loop | Itera su | Si chiude quando | Ruolo umano |
+|---|---|---|---|
+| **L1 · Execution** | Passi dentro un task | Feedback dell'ambiente: output dei test, risposta API, contenuto dei file | Ai bordi: approva il piano, rivede il risultato |
+| **L2 · Task (Ralph)** | Un singolo artefatto | Conformità alla spec e test verdi | Scrive la spec, giudica il «fatto», osserva i pattern di fallimento |
+| **L3 · Product (factory)** | Una codebase e il suo backlog | Non si chiude: segnali esterni (issue, log di produzione, feedback utenti) | Configurabile: scegli quali fasi automatizzare |
+| **L4 · System (autoresearch)** | Prompt, harness, scelta del modello, e le eval stesse | Eval, giudici, feedback di prodotto filtrato | Fornisce conoscenza tacita, valida i checkpoint finali |
+| **L5 · Oversight** | Obiettivi, budget, cosa tagliare | Mai | È l'umano. Non delegabile |
+
+### Note su ciascuno
+
+**L1 — Execution loop.** È il ciclo che l'agente già esegue a ogni turno: chiama un tool, legge il risultato, decide l'azione successiva. Non lo costruisci tu, lo fornisce l'harness. Ha un difetto strutturale: *termina anche quando l'agente decide di aver finito, che abbia finito davvero o no*. Tutto il resto della scala nasce da questo difetto.
+
+**L2 — Task loop.** Il primo ad avere un nome: il *Ralph loop* di Geoffrey Huntley. Riavvia l'agente contro la stessa specifica, allocando una finestra di contesto completamente nuova a ogni iterazione, un solo task per giro. Lo spreco apparente è il punto: rialimentare l'intera spec ogni volta previene il context rot e gli eventi di compattazione che degradano silenziosamente le sessioni lunghe.
+
+**L3 — Product loop.** La «software factory»: triage, specifica, implementazione, review, verifica, rilascio, monitoraggio. Warp ha messo il proprio repo open source sotto il controllo di Oz, la sua piattaforma factory, e descrive il percorso di adozione come partire da repo a basso rischio e alzare progressivamente la percentuale di PR mergiate automaticamente dal 20% verso il 60%. Il vecchio autonomy slider, applicato a una pipeline invece che a una sessione.
+
+**L4 — System loop.** L'outer loop che studia e mantiene il sistema primario, iterando su prompt, harness e sulle eval stesse. Ha esistenza provata a entrambi gli estremi di scala: il caso minimo è l'autoresearch di Karpathy — circa 630 righe di Python che hanno eseguito 50 esperimenti ipotesi-modifica-valutazione in una notte su una GPU sola; il caso spedito è Brain2Qwerty v2 di Meta, dove gli agenti hanno modificato iterativamente la codebase per inventare architetture di decoding migliori. Il caveat di Meta è istruttivo: *le configurazioni finali di training sono state comunque scelte a mano*.
+
+<div class="box human-box">
+  <span class="label">L5 · Il loop senza nome</span>
+  <p>Nel diagramma originale di swyx l'anello più esterno era letteralmente etichettato «???? loop», con verbi «set goals, allocate, cull» e condizione d'uscita «nessuna». Voss lo chiama <strong>oversight loop</strong>. La formulazione di Addy Osmani è la più compatta: <em>il loop interno è capacità, quello esterno è agency</em>. E il promemoria del 1979 che Simon Willison cita spesso: un computer non può essere ritenuto responsabile, quindi un computer non deve mai prendere una decisione manageriale.</p>
+</div>
+
+Un chiarimento utile: l'*Agentic MapReduce* (fan-out di agenti paralleli su un repo, aggregazione dei risultati) **non è un loop**. Dispatch-gather-validate è una pipeline: niente rientra nel ciclo successivo, e un loop senza feedback è solo un `for`. Il fan-out è una topologia che puoi usare dentro qualunque dei cinque livelli.
+
+<div class="box key">
+  <span class="label">Da portare via</span>
+  <p>L'autonomia è una manopola che esiste <strong>separatamente su ogni loop</strong>. Puoi avere un execution loop completamente autonomo dentro un product loop strettamente supervisionato. La domanda ingegneristica non è «quanta autonomia», è: <em>quale informazione mi serve per tarare correttamente ciascuna manopola?</em></p>
+</div>
+
+## 5. Ottimizzare l'harness
+
+La progressione dell'oggetto ottimizzato, secondo Weng, è: **istruzioni → contesto strutturato → workflow → codice dell'harness → codice dell'ottimizzatore**. Man mano che il modello diventa più capace, ci si sposta verso bersagli più complessi e metodi più generici. È la stessa traiettoria del prompt engineering, un piano sopra.
+
+### 5.1 Contesto come playbook, non come coda
+
+**ACE** (Agentic Context Engineering) tratta il contesto come un playbook che evolve invece che come un prompt che si allunga. Tre componenti: un *generator* che produce traiettorie, un *reflector* che distilla intuizioni dai successi e dai fallimenti, un *curator* che aggiorna il contesto con voci incrementali.
+
+Il dettaglio che conta: il curator **non riscrive il blob del prompt**. Emette bullet strutturati nella forma `(identificatore, descrizione)`, uniti al logbook con logica deterministica, e periodicamente deduplicati. È così che si previene il *context collapse* — la degenerazione progressiva che ottieni facendo riscrivere al modello l'intero prompt a ogni giro.
+
+### 5.2 Separare il meccanismo dal contenuto
+
+**MCE** (Meta Context Engineering) separa il *come* si gestisce il contesto dal *cosa* c'è dentro: l'evoluzione delle skill avviene al livello meta, l'ottimizzazione del contesto al livello base. Implementativamente una funzione di contesto è una directory di file: componenti statiche (`skill.md`) e dinamiche (contesto e rollout). Se ti sembra familiare, è perché è esattamente la struttura che usi già con Claude Code.
+
+### 5.3 L'harness che si modifica da solo
+
+**Self-Harness** usa un loop propose-evaluate-accept in tre stadi. Vale la pena studiarlo nel dettaglio perché è il template riutilizzabile anche a mano, senza automazione:
+
+1. **Weakness mining.** Si raggruppano i fallimenti in pattern ancorati al verifier. Attenzione: due run possono condividere lo stesso esito superficiale (timeout, artefatto mancante) avendo meccanismi causali diversi. Serve un record di fallimento ricco: causa terminale a livello di verifier, stato causale del comportamento dell'agente, meccanismo astratto esposto dalla traccia.
+2. **Harness proposal.** Il modello propone modifiche *limitate*, con un contesto di proposta vincolato: le superfici editabili, i pattern di fallimento verificati, i comportamenti che passano e vanno preservati, e il riassunto delle modifiche già tentate. Si preferiscono errori ricorrenti e risolvibili con cambiamenti stretti.
+3. **Validation.** Le candidate vengono valutate con test di regressione su held-in (la debolezza è risolta?) e held-out (ho introdotto altri problemi?). Si accetta **solo** se non c'è regressione su nessuno dei due. Le scartate vengono loggate senza toccare l'harness attivo.
+
+### 5.4 Osservabilità come precondizione
+
+**AHE** (Agentic Harness Engineering) individua il collo di bottiglia nell'osservabilità: quando un rollout fallisce devi sapere *quale componente* è responsabile, e ogni modifica dev'essere fondata su evidenza. Tre pilastri:
+
+- **Osservabilità dei componenti:** ogni componente editabile ha una rappresentazione nel filesystem, così lo spazio d'azione è esplicito. I sette componenti sono: system prompt, descrizione dei tool, implementazione dei tool, middleware, skill, configurazione dei subagent, memoria a lungo termine. Ogni pattern di fallimento viene mappato su uno di questi.
+- **Osservabilità dell'esperienza:** le traiettorie grezze vengono analizzate in report per-task e poi aggregate in una panoramica. L'accesso stratificato è più efficiente in token: leggi il riassunto, scendi al grezzo solo se serve.
+- **Osservabilità delle decisioni:** ogni modifica è accompagnata da una *previsione* falsificabile al giro successivo — evidenza del fallimento, causa radice inferita, fix mirato, impatto previsto includendo le regressioni a rischio.
+
+<div class="box key">
+  <span class="label">Il risultato che conta</span>
+  <p>Un harness evoluto automaticamente ha battuto harness progettati da umani su Terminal-Bench-2, e — dettaglio più interessante — lo stesso harness congelato, senza ulteriore evoluzione, trasferisce su SWE-bench-verified. Significa che sta codificando esperienza ingegneristica nei componenti, non ottimizzando sul benchmark.</p>
+</div>
+
+### 5.5 La capacità di aggiornare non è la capacità di beneficiare
+
+Un risultato che ridimensiona molto entusiasmo. Lin et al. hanno separato due assi: la capacità di *produrre* modifiche utili all'harness, e la capacità di *trarne beneficio*. Il primo asse è sorprendentemente piatto — un modello da 9B scrive aggiornamenti proceduralmente isomorfi a quelli di Opus 4.6. Il secondo scala con la capacità del modello: per sfruttare un harness serve invocare skill e tool al momento giusto ed essere bravi a seguire istruzioni su orizzonti lunghi.
+
+Corollario pratico: **puoi far scrivere l'harness a un modello piccolo ed economico, ma non puoi farlo eseguire da uno piccolo**. E, più in generale, la struttura ricorsiva da sola non basta: il primo lavoro su questa linea (STOP, 2023) migliorava le prestazioni con GPT-4 e le *peggiorava* con modelli più deboli.
+
+## 6. Le skill come formato
+
+Le skill — cartelle di markdown che codificano workflow, quality gate e pratiche — sono diventate il formato con cui l'harness si scrive. La definizione che gira è di Addy Osmani: codificano i workflow, i quality gate e le best practice che un ingegnere senior usa quando costruisce software. Philipp Schmid di Google DeepMind ha mostrato che riducono la necessità di codice di orchestrazione, che fino a poco fa si scriveva in Python: *gli agenti sono file*.
+
+Tre avvertenze dal campo, tutte dell'ultimo trimestre:
+
+- **Skills hell è reale.** Matt Pocock lo paragona al framework hell: il consiglio è scriverne *meno* e *più piccole*, mettendo più pensiero nella struttura.
+- **Le skill convergono.** Paul Bakaus osserva che la maggior parte delle skill — e dei modelli — non è molto creativa: convergono in una direzione, e se tutti usano la stessa skill per il frontend, tutto finisce per assomigliarsi. Se il tuo prodotto vive di differenziazione visiva o di voce, la skill condivisa è un rischio, non un asset.
+- **Vanno riscritte a ogni modello.** L'analogia che gira dalla conferenza: ogni nuovo modello è come un figlio che passa dalle medie al liceo, devi cambiargli il programma per vedere i benefici.
+
+<div class="box warn">
+  <span class="label">Attenzione</span>
+  <p>«Autonomia senza struttura produce tanta fuffa quanta leva.» Una skill è codice che gira senza review: trattala con gli stessi quality gate del resto — versionata, testata contro casi noti, con un owner.</p>
+</div>
+
+## 7. Pratica: un outer loop minimo in Node
+
+Teoria a parte, la cosa da costruire per prima è un **L2 (task loop)** sopra il coding agent che già usi. È il livello con il miglior rapporto valore/rischio: ha una condizione d'uscita nitida, gira su un artefatto solo, e ti costringe a scrivere il verifier — che è il pezzo che serve comunque a tutti i livelli superiori.
+
+### 7.1 I quattro pezzi obbligatori
+
+1. **Una spec** scritta, riletta integralmente a ogni iterazione (niente contesto ereditato).
+2. **Un ambiente isolato** per giro: un git worktree, o un sandbox se l'agente esegue codice non fidato.
+3. **Un verifier che l'agente non può toccare**: lint, test, type check, security scan. Se l'agente può modificare il verifier, il loop ottimizza il verifier.
+4. **Tre hard stop**: numero massimo di iterazioni, assenza di progresso, budget. Servono a far *fermare* il sistema invece di lasciarlo correre oltre il bordo.
+
+### 7.2 Il runner
+
+```js
+// loop-runner.mjs — outer loop L2 (task loop) su un coding agent CLI
+// Stato durevole: git + file JSONL. Nessuno stato in memoria fra i giri.
+
+import { execFileSync, spawnSync } from "node:child_process";
+import { appendFileSync, readFileSync } from "node:fs";
+
+const CONFIG = {
+  spec:        "specs/feature-x.md",
+  maxIter:     12,
+  noProgress:  3,          // giri consecutivi senza avanzare → stop
+  budgetUsd:   8.0,
+  traceFile:   ".loop/trace.jsonl",
+};
+
+const sh = (cmd, args) => spawnSync(cmd, args, { encoding: "utf8" });
+
+/** Verifier: fuori dalla superficie editabile dell'agente. */
+function verify() {
+  const gates = [
+    ["npm", ["run", "lint"]],
+    ["npm", ["run", "typecheck"]],
+    ["npm", ["test", "--", "--coverage"]],
+    ["npm", ["audit", "--audit-level=high"]],
+  ];
+  for (const [cmd, args] of gates) {
+    const r = sh(cmd, args);
+    if (r.status !== 0) {
+      return { pass: false, gate: args.join(" "), out: r.stdout + r.stderr };
+    }
+  }
+  return { pass: true };
+}
+
+/** Segnale di progresso oggettivo: non chiedere all'agente se ha avanzato. */
+function progressSignal() {
+  const failing = sh("npm", ["test", "--", "--reporter=json"]).stdout;
+  const diff = execFileSync("git", ["diff", "--stat", "HEAD~1"], { encoding: "utf8" });
+  return { failingTests: countFailures(failing), changedLines: countLines(diff) };
+}
+
+async function run() {
+  const spec = readFileSync(CONFIG.spec, "utf8");
+  let stale = 0, spent = 0, prev = null;
+
+  for (let i = 1; i <= CONFIG.maxIter; i++) {
+    // 1. Contesto fresco: worktree pulito, spec intera, nessuna cronologia.
+    const branch = `loop/iter-${i}`;
+    execFileSync("git", ["worktree", "add", `.wt/${branch}`, "-b", branch]);
+
+    // 2. Un solo task per giro. L'agente sceglie quale, dalla spec.
+    const res = sh("your-agent-cli", [
+      "--cwd", `.wt/${branch}`,
+      "--prompt", buildPrompt(spec, prev),   // prev = fallimento precedente, se c'è
+      "--max-turns", "40",
+    ]);
+    spent += parseCost(res.stdout);
+
+    // 3. Verifica indipendente.
+    const v = verify();
+    const p = progressSignal();
+
+    appendFileSync(CONFIG.traceFile, JSON.stringify({
+      iter: i, pass: v.pass, gate: v.gate ?? null,
+      failingTests: p.failingTests, changedLines: p.changedLines,
+      spent, ts: new Date().toISOString(),
+    }) + "\n");
+
+    // 4. Hard stop 1 — obiettivo raggiunto.
+    if (v.pass && specSatisfied(spec)) {
+      execFileSync("git", ["merge", "--no-ff", branch]);
+      return console.log(`done @ iter ${i}`);
+    }
+
+    // 5. Hard stop 2 — nessun progresso.
+    stale = (prev && p.failingTests >= prev.failingTests) ? stale + 1 : 0;
+    if (stale >= CONFIG.noProgress) return escalate("no-progress", i);
+
+    // 6. Hard stop 3 — budget.
+    if (spent >= CONFIG.budgetUsd) return escalate("budget", i);
+
+    prev = { ...p, failure: v.out };
+    execFileSync("git", ["worktree", "remove", `.wt/${branch}`, "--force"]);
+  }
+  escalate("max-iterations", CONFIG.maxIter);
+}
+```
+
+<div class="box key">
+  <span class="label">La riga che fa la differenza</span>
+  <p><code>escalate()</code>. Un loop che non sa come chiedere aiuto è un loop che gira finché non lo fermi tu accorgendotene. Ogni hard stop deve produrre un artefatto leggibile — la traccia, l'ultimo diff, il gate fallito — e notificarti dove già guardi: Slack, una issue, una mail. È il punto di contatto fra L2 e L5.</p>
+</div>
+
+### 7.3 Scrivere una condizione d'uscita che l'agente non possa falsificare
+
+La regola: **la condizione d'uscita non deve mai essere l'autodichiarazione del modello**. «L'agente dice che ha finito» non è un segnale. Sono segnali: exit code dei test, diff che compila, grep su un marcatore che solo il verifier può scrivere, un giudice separato che non ha scritto il codice.
+
+Corollario dal lato del reward hacking: se il segnale sono gli unit test, l'agente può fare overfitting sui test; se è un modello giudice, può imparare i trucchi specifici di quel giudice; se è un punteggio di benchmark, può sfruttare gli artefatti del benchmark. Il verifier va progettato assumendo che qualcuno provi a barare — perché qualcuno ci proverà, e non sarà in malafede: sarà solo un ottimizzatore che fa il suo mestiere.
+
+### 7.4 La scala di adozione
+
+| Livello | Cosa automatizzi | Precondizione |
+|---|---|---|
+| 0 | Niente: prompt a mano, review a mano | — |
+| 1 | Un task loop su un repo a basso rischio | Verifier che gira in CI, spec scritta |
+| 2 | Loop schedulato (cron) su un backlog ristretto | Hard stop + escalation funzionanti |
+| 3 | Merge automatico di PR sotto una soglia di rischio | Tracce raccolte, pattern di fallimento classificati |
+| 4 | Loop che modifica l'harness stesso | Held-in/held-out, superfici read-only, audit |
+
+Nessuno salta livelli senza pagarli. La percentuale di PR auto-mergiate che Warp descrive — dal 20% verso il 60% — è una manopola che si alza *man mano che si accumula fiducia misurata*, non una configurazione iniziale.
+
+## 8. Superfici editabili e permessi
+
+Nel momento in cui un loop può modificare il proprio harness, hai un programma che può editare il proprio sistema operativo. Weng lo dice esplicitamente: le astrazioni si rompono, e la superficie editabile va progettata con cura mentre **controllo dei permessi e livelli di sicurezza devono vivere fuori dal loop**.
+
+Il vincolo operativo di AHE è il modello da copiare:
+
+| Editabile dall'agente | Read-only, sempre |
+|---|---|
+| System prompt | La directory delle run |
+| Descrizione e implementazione dei tool | Il tracer |
+| Middleware | Il verifier |
+| Skill | La configurazione del modello (incluso il budget di reasoning) |
+| Configurazione dei subagent | I dati held-out |
+| Memoria a lungo termine | I secret, sempre e comunque |
+
+Rendere read-only queste superfici disabilita un'intera classe di reward hacking: disattivare il verifier, sostituire il modello, alzare il budget di reasoning. Ed è ciò che rende ogni guadagno registrato *attribuibile* alle modifiche dell'harness invece che a un cambio di condizioni.
+
+<div class="box warn">
+  <span class="label">Il collegamento con la sicurezza</span>
+  <p>Un outer loop schedulato che legge issue, PR e log di produzione ha per costruzione accesso a dati privati, esposizione a contenuto non fidato e un canale d'uscita. È la <em>lethal trifecta</em> al completo. Il loop non è un dettaglio di produttività: è un componente con un modello di minaccia. Sandbox per l'esecuzione, permessi al livello dell'operazione e non del service account, e trace consultabili non sono opzionali a questo livello.</p>
+</div>
+
+## 9. Dieci errori tipici
+
+<ol class="mistakes">
+<li><strong>Costruire L3 prima di L2.</strong> La software factory è affascinante e il task loop è noioso, ma il secondo produce il verifier di cui il primo ha bisogno. Chi salta il passaggio scopre a valle che non ha modo di sapere se la fabbrica sta producendo o distruggendo.</li>
+<li><strong>Usare l'autodichiarazione del modello come condizione d'uscita.</strong> «Ho completato il task» è output, non segnale.</li>
+<li><strong>Loop senza feedback.</strong> Se niente rientra nel giro successivo non è un loop, è un <code>for</code>. Il fan-out parallelo è la trappola più comune in questo senso.</li>
+<li><strong>Tenere lo stato in contesto invece che su file.</strong> Funziona per venti minuti, poi la compattazione mangia il pezzo che serviva, e non te ne accorgi perché il modello continua a rispondere con sicurezza.</li>
+<li><strong>Contesto ereditato fra le iterazioni.</strong> È l'errore che il Ralph loop risolve col brute force. Ricaricare l'intera spec a contesto pulito sembra spreco: è manutenzione.</li>
+<li><strong>Verifier dentro la superficie editabile.</strong> Prima o poi il loop scopre che disabilitare un test è più economico che farlo passare. Non è malizia, è ottimizzazione.</li>
+<li><strong>Nessun hard stop.</strong> Massimo iterazioni, assenza di progresso, budget. Tre, non uno. Un loop senza fermata non converge: gira finché qualcosa di esterno lo interrompe.</li>
+<li><strong>Non conservare i fallimenti.</strong> La letteratura, e quindi i modelli, sono sbilanciati verso i successi. Un harness dovrebbe rendere facile <em>preservare</em> i tentativi falliti: imparare dal fallimento è il modo migliore per potare lo spazio di ricerca.</li>
+<li><strong>Ottimizzare solo il breve termine.</strong> Un coding agent completa il task assegnato, ma manutenibilità, confini di ownership, costo di migrazione e debito di debugging futuro non entrano quasi mai nel segnale. Se il tuo loop gira su un repo che vivrà cinque anni, questo è il rischio principale, non i bug.</li>
+<li><strong>Confondere l'umano-nel-loop con l'umano-che-approva.</strong> Cliccare «approva» su venti diff che non hai letto è teatro. Osmani: il modello può scrivere la riga, il verdetto è tuo — e un verdetto richiede evidenza, non un pulsante.</li>
+</ol>
+
+<div class="box human-box">
+  <span class="label">Il vincolo vero</span>
+  <p>Il dato più onesto emerso dalla conferenza viene da chi è più avanti: anche dentro Anthropic, il team che usa Tag riferisce di essere limitato dalle review e dalla capacità umana di concettualizzare cosa sta facendo il sistema. <strong>Il checkpoint che gli umani si sono tenuti è adesso il collo di bottiglia.</strong> Progettare loop significa soprattutto progettare quel checkpoint: cosa deve arrivare a una persona, in che forma, e con quale evidenza allegata.</p>
+</div>
+
+## 10. Panorama strumenti
+
+| Strumento | Livello | Note |
+|---|---|---|
+| Claude Code / Codex / Gemini CLI | L1 | Forniscono l'execution loop e il set di tool ormai standardizzato. Sono il substrato, non il progetto. |
+| Cursor / Warp | L1–L2 | Cursor ha un SDK per costruire sopra; Warp ha Oz per il livello factory. |
+| Ralph loop | L2 | Non è software, è una tecnica: un `while` con contesto fresco. Da implementare in venti righe prima di comprare qualcosa. |
+| Vercel eve | L2–L3 | Presentato come «agent framework» nel senso in cui Next.js è un framework React. |
+| LangChain deep agents | L2–L4 | Corso e progetto harness open source usciti in scia al saggio di Weng. |
+| HumanLayer | L5 | Il pezzo che manca quasi sempre: contattare gli umani via tool call, launch/pause/resume durevole. |
+| Sandbox (E2B, Vercel Sandbox, Modal, Northflank) | trasversale | MicroVM Firecracker o gVisor. Necessari appena l'agente esegue codice che non hai letto. |
+| Arize / Langfuse / MLflow | trasversale | Sweep delle tracce e clustering dei fallimenti. Senza questo, il weakness mining lo fai a mano. |
+
+#### Benchmark da conoscere
+
+- **Terminal-Bench-2** — il riferimento su cui si confrontano gli harness dei coding agent.
+- **SWE-bench Verified** — utile soprattutto come test di trasferimento: un harness che regge qui non ha ottimizzato sul benchmark di partenza.
+- **RE-Bench** — 7 ambienti di ML research engineering contro esperti umani. Il dato istruttivo: gli agenti migliori segnano 4× gli umani con budget di 2 ore, ma gli umani li superano a 8 e 32 ore. Gli orizzonti lunghi sono ancora nostri.
+
+## 11. Cosa studiare, in ordine
+
+1. **Il saggio di Weng, per intero.** 31 minuti, e la bibliografia è la mappa del campo. Salta la matematica di MCE al primo giro, torna dopo.
+2. **La tassonomia dei loop di Voss.** Dieci minuti, ed è il vocabolario che ti serve per non confondere quattro architetture diverse.
+3. **Implementa un Ralph loop** su un tuo repo secondario. Venti righe di bash bastano per capire perché il contesto fresco funziona.
+4. **Scrivi il verifier prima dell'automazione.** Se non hai lint, typecheck, test e security scan che girano con un exit code, non hai un loop: hai un generatore.
+5. **Raccogli tracce per due settimane** prima di ottimizzare qualsiasi cosa. Il weakness mining su tre esempi ricordati a memoria produce fix che non risolvono niente.
+6. **Solo dopo**: subagent, evoluzione dell'harness, held-out set.
+
+#### Fonti primarie
+
+<ul class="sources">
+<li>Weng, L. — <em>Harness Engineering for Self-Improvement</em>, Lil'Log, 4 luglio 2026. <code>lilianweng.github.io/posts/2026-07-04-harness/</code></li>
+<li>Voss, L. — <em>What the Hell Is a Loop, Anyway?</em>, O'Reilly Radar, 29 luglio 2026.</li>
+<li>MacManus, R. — <em>5 Trends That Defined AI Engineering at World's Fair 2026</em>, Latent Space, 14 luglio 2026.</li>
+<li>Osmani, A. — <em>Loop Engineering</em> e <em>Own the Outer Loop</em>, giugno 2026.</li>
+<li>Huntley, G. — <em>Everything Is a Ralph Loop</em>.</li>
+<li>Horthy, D. — <em>12 Factor Agents</em>, HumanLayer. Il fattore 6 (launch/pause/resume) e il 7 (contattare gli umani con tool call) sono i due che contano per L5.</li>
+<li>Litt, G. — <em>Understanding Is the New Bottleneck</em>, 2 luglio 2026. La posizione contraria, da leggere apposta.</li>
+</ul>
+
+<div class="box human-box">
+  <span class="label">La controparte, per onestà intellettuale</span>
+  <p>Non c'è consenso. Dex Horthy di HumanLayer, che non è contro i loop, ha detto in chiusura di conferenza che l'entusiasmo sta superando la disciplina, e che Kubernetes è costruito su control loop — ma <em>deterministici</em>; il suo consiglio era scendere di un livello d'astrazione, non salire. Geoffrey Litt sostiene che chi delega la comprensione viene sostituito dall'agente. Paul Bakaus lo dice più secco: non esiste l'auto, e non esisterà. E anche Geoffrey Huntley, che i loop li ha inventati, avverte che l'anno prossimo alla stessa conferenza potremmo sentire un sacco di gente dire che le loro fabbriche e i loro loop hanno fallito.</p>
+</div>
+
+---
+
+*Dispensa di studio · agosto 2026 — Fonti verificate al 16 agosto 2026. Il campo si muove a trimestri: ricontrolla le affermazioni datate prima di riusarle.*

@@ -1,0 +1,190 @@
+---
+title: "Sotto Ollama — Il runtime di inferenza"
+description: "Cosa accade tra il modello scaricato e il token che appare sullo schermo: formati, quantizzazione, gestione della memoria, e i quattro runtime che dominano il panorama."
+order: 3
+argomento: "Strato L0"
+date: 2026-08-29
+tag: "Nuova"
+---
+
+*Ultima revisione: 29 agosto 2026 · Prerequisiti: [Dispensa 00 (La Mappa)](/software-engineering-3.0/dispense/00-la-mappa/), sezione L0 · Copre lo strato «Modello & inference».*
+
+<p class="part">Parte I · I fondamenti</p>
+
+## 1. Il problema che il runtime risolve
+
+Un modello linguistico, da fermo, è un file di pesi: miliardi di numeri in virgola mobile, decine o centinaia di gigabyte. Non fa niente. Perché produca testo serve un programma che carichi quei pesi in memoria, riceva un prompt, esegua la moltiplicazione di matrici strato per strato e restituisca un token alla volta. Quel programma è il **runtime di inferenza**.
+
+La parola «inferenza» distingue questa fase dal training: il training modifica i pesi, l'inferenza li usa senza toccarli. Tutto ciò che un utente sperimenta di un modello — velocità, costo, latenza, capacità di servire più richieste insieme — è determinato in larga parte dal runtime, non dal modello.
+
+<div class="box key">
+  <span class="label">Definizione</span>
+  <p>Il runtime di inferenza è il software che esegue un modello a pesi congelati: gestisce il caricamento, la memoria, la coda delle richieste e la generazione token per token. Modello e runtime sono componenti separati e intercambiabili: lo stesso modello può girare su runtime diversi con prestazioni molto diverse.</p>
+</div>
+
+<div class="ex"><span class="label">Esempio quotidiano</span>
+<p>Il comando <code>ollama run qwen3.6</code> nasconde quattro operazioni: scarica un file GGUF già quantizzato, lo carica in RAM o VRAM, avvia un server HTTP con API compatibile OpenAI, e mette le richieste in coda una dietro l'altra. Ollama è il runtime; Qwen è il modello.</p></div>
+
+## 2. Anatomia di una generazione
+
+Ogni risposta di un modello autoregressivo attraversa due fasi con caratteristiche opposte.
+
+### 2.1 Prefill
+
+Il prompt intero viene processato in parallelo: tutti i token di ingresso passano insieme attraverso la rete. È una fase *compute-bound* — limitata dalla potenza di calcolo — e determina il tempo di attesa prima del primo token (time to first token).
+
+### 2.2 Decode
+
+I token di uscita vengono generati uno alla volta: ciascuno dipende da tutti i precedenti. È una fase *memory-bound* — limitata dalla banda di memoria, non dal calcolo — perché a ogni passo l'intero insieme dei pesi va riletto dalla memoria per produrre un solo token.
+
+<div class="box key">
+  <span class="label">Conseguenza pratica</span>
+  <p>La velocità di generazione (token al secondo) dipende più dalla banda di memoria che dai FLOPS. È il motivo per cui i Mac con memoria unificata reggono bene modelli grandi in locale, e il motivo per cui la quantizzazione — che riduce i byte da leggere — accelera la generazione oltre a ridurre l'ingombro.</p>
+</div>
+
+## 3. La KV cache
+
+Durante il decode, per ogni nuovo token il meccanismo di attention deve confrontarsi con tutti i token precedenti. Ricalcolare da zero le rappresentazioni di ogni token già visto sarebbe quadraticamente costoso: la soluzione è conservare le chiavi e i valori (K e V) già calcolati in una struttura chiamata **KV cache**.
+
+La KV cache è il secondo consumatore di memoria dopo i pesi, e cresce linearmente con la lunghezza del contesto e con il numero di richieste servite in parallelo. Gran parte dell'ingegneria dei runtime moderni è ingegneria della KV cache:
+
+- **PagedAttention** (vLLM): la cache è divisa in pagine a dimensione fissa, come la memoria virtuale di un sistema operativo. Elimina la frammentazione e permette di servire molte più richieste con la stessa VRAM.
+- **RadixAttention** (SGLang): le richieste che condividono un prefisso — lo stesso system prompt, lo stesso documento — riusano la stessa porzione di cache invece di duplicarla. Nei carichi RAG e agentici, dove il prefisso comune è lungo, la riduzione di costo misurata in pratica è nell'ordine del 20–30%.
+- **Prompt caching** (API commerciali): stesso principio esposto come funzione di fatturazione — il prefisso già processato costa una frazione del prezzo pieno.
+
+## 4. Quantizzazione e formati
+
+I pesi nascono tipicamente a 16 bit per parametro (FP16/BF16). La quantizzazione li rappresenta con meno bit — 8, 4, a volte 2 o 1.5 — accettando una perdita di precisione in cambio di un ingombro e un tempo di lettura ridotti. Un modello da 70 miliardi di parametri passa da ~140 GB in FP16 a ~40 GB a 4 bit: è la differenza tra «serve un cluster» e «gira su una workstation».
+
+| Formato | Dove vive | Caratteristica |
+|---|---|---|
+| **GGUF** | llama.cpp, Ollama, LM Studio | File unico, pre-quantizzato, pensato per CPU e hardware consumer. Le varianti (Q4_K_M, Q5_K_S…) indicano bit e schema; Q4_K_M è il punto di partenza pratico standard. |
+| **AWQ / GPTQ** | vLLM, SGLang | Quantizzazione «activation-aware» orientata alla GPU: protegge i pesi più importanti per l'attivazione, degrada meno a parità di bit. |
+| **FP8** | GPU datacenter recenti | Formato nativo hardware: metà memoria di FP16 con perdita quasi nulla, ma richiede GPU che lo supportino. |
+| **MLX** | Apple Silicon | Formato e runtime di Apple per la memoria unificata; Ollama lo usa automaticamente su Mac dalle versioni recenti. |
+
+<div class="ex"><span class="label">Esempio quotidiano</span>
+<p>Scaricare <code>qwen3.6:35b</code> con Ollama significa scaricare un GGUF a 4 bit, circa 20 GB. La stessa release in FP16 ne peserebbe 70. Su un laptop con 32 GB di RAM, solo la prima delle due esiste come opzione.</p></div>
+
+Regola empirica sulla qualità: fino a 4 bit la degradazione è modesta per la maggior parte degli usi; sotto i 4 bit diventa visibile su compiti di ragionamento e codice, e va verificata sul proprio caso, non sui benchmark altrui.
+
+<p class="part">Parte II · Il serving</p>
+
+## 5. Le tecniche di serving
+
+Servire un utente e servirne cento sono problemi diversi. Tre tecniche separano un runtime da laptop da un runtime di produzione.
+
+<dl>
+<dt>Continuous batching</dt>
+<dd>Invece di aspettare che un batch di richieste finisca prima di iniziare il successivo, le nuove richieste vengono inserite nel batch in corsa, a ogni passo di generazione. È la singola tecnica che più aumenta il throughput: la GPU non resta mai ferma ad aspettare la richiesta più lenta.</dd>
+<dt>Speculative decoding</dt>
+<dd>Un modello piccolo e veloce propone una bozza di più token; il modello grande li verifica in un solo passaggio parallelo, accettando quelli corretti. Poiché verificare è più economico che generare, il risultato è identico a quello del modello grande ma prodotto più in fretta. Funziona bene quando il testo è prevedibile (codice, boilerplate), meno quando è sorprendente.</dd>
+<dt>Disaggregazione prefill/decode</dt>
+<dd>Poiché prefill è compute-bound e decode è memory-bound, i sistemi di produzione più grandi li eseguono su pool di GPU separati, ottimizzati ciascuno per la propria fase. È il livello a cui operano i provider di API; raramente rilevante sotto quella scala.</dd>
+</dl>
+
+## 6. I quattro runtime
+
+| Runtime | Progettato per | Meccanica | Quando sceglierlo |
+|---|---|---|---|
+| **llama.cpp** | Controllo massimo, CPU, Apple Silicon | Motore C/C++ alla base dell'ecosistema GGUF; espone ogni parametro | Hardware limitato, inferenza CPU, esigenza di controllo fine. È la fondazione su cui altri costruiscono. |
+| **Ollama** | Sviluppo locale, prototipi | Wrapper attorno a un motore GGUF: coda FIFO, API compatibile OpenAI, gestione modelli a comandi | Il default per un singolo sviluppatore. Un comando per installare, uno per servire. Non pensato per traffico concorrente serio. |
+| **vLLM** | Serving di produzione | PagedAttention + continuous batching; API OpenAI; massima utilizzazione GPU | Dalla decina di utenti concorrenti in su. È la scelta di riferimento per un server di inferenza self-hosted. |
+| **SGLang** | Carichi RAG e agentici su larga scala | RadixAttention per il riuso dei prefissi; multi-modello nello stesso processo; hardware distribuito | Quando molte richieste condividono contesto (pipeline RAG, agenti con system prompt lunghi) o servono più modelli da un processo solo. |
+
+Attorno ai quattro: **LM Studio** e **Jan** come interfacce grafiche (il secondo interamente open source, Apache 2.0), **mlx-lm** per chi vuole il massimo da Apple Silicon, **TensorRT-LLM** con Triton per datacenter NVIDIA su larga scala. Un punto di stato dell'ecosistema: quasi tutto lo strato — llama.cpp, Ollama, Jan, vLLM, SGLang, mlx-lm — è open source con licenze permissive, e Hugging Face ha dismesso il proprio server TGI indirizzando verso le alternative comunitarie. Il consolidamento indicato dalla Mappa («lo strato si è stabilizzato») è avvenuto qui.
+
+<p class="part">Parte III · Il panorama e le decisioni</p>
+
+## 7. Il panorama open weights — agosto 2026
+
+«Open weights» significa che i pesi sono scaricabili e utilizzabili, con licenze che vanno dalla piena permissività (Apache 2.0, MIT) a licenze custom con restrizioni. Non implica che dati e ricette di training siano pubblici.
+
+Il tratto architetturale dominante del 2026 è il **Mixture-of-Experts sparso**: modelli con centinaia di miliardi di parametri totali ma poche decine attivi per token. Il costo di calcolo per token scende; il fabbisogno di memoria per *conservare* i pesi no. È la distinzione che spiega quasi ogni scelta pratica di questo strato.
+
+| Famiglia | Tratti | Collocazione |
+|---|---|---|
+| **Qwen3 / 3.5 / 3.6** (Alibaba) | Apache 2.0, taglie da 1.7B a 235B (MoE 235B-A22B al vertice), oltre 100 lingue | Il default locale del 2026: la risposta più comune a «cosa faccio girare sulla mia macchina». Qwen3.6-35B-A3B è il riferimento per macchine da 32 GB. |
+| **Qwen3-Coder** | MoE 30B con 3B attivi; ~50% su SWE-bench Verified | Il punto d'equilibrio per il coding agentico su singola GPU consumer (24 GB con GGUF a 4 bit). |
+| **GLM-5** (Z.ai) | 744B totali / 40B attivi, licenza MIT, supporto vLLM/SGLang dal giorno zero | In cima alle classifiche open; fuori portata per hardware singolo, pensato per server di inferenza. |
+| **DeepSeek-V4** | Varianti Pro e Flash; la Flash a 3 bit è il modello più grande che entri in 128 GB | Frontiera open per capacità; la variante Pro richiede infrastruttura multi-GPU. |
+| **gpt-oss-120b** (OpenAI) | ~66 GB, orientato a ragionamento e tool calling | Comodo su workstation da 128 GB di memoria unificata. |
+| **Gemma 4** (Google) | Taglie piccole di alta qualità | La 12B è l'assistente credibile per macchine da 16 GB. |
+| **Kimi K3, MiniMax M2** | MoE grandi (M2: 230B/10B attivi), API a costo molto basso | Rilevanti soprattutto via API o su server dedicati. |
+
+Verdetto sullo stato: il divario tra open weights e modelli frontier via API si è ristretto al punto che per molti compiti — classificazione, estrazione, RAG, coding assistito su task delimitati — un modello aperto ben scelto è sufficiente. Resta reale per i compiti agentici lunghi e il ragionamento complesso, dove i modelli frontier mantengono il vantaggio.
+
+## 8. Il criterio: la memoria decide
+
+La scelta del modello locale è prima di tutto un problema di budget di memoria, non di classifica. La regola di dimensionamento:
+
+<div class="box key">
+  <span class="label">Regola</span>
+  <p>Ingombro ≈ parametri totali × bit/8, più il 10–30% per KV cache e overhead a seconda del contesto. Un MoE si dimensiona sui parametri <em>totali</em> (che vanno tenuti in memoria), ma genera alla velocità dei parametri <em>attivi</em>.</p>
+</div>
+
+| Memoria disponibile | Scelte sensate (agosto 2026) |
+|---|---|
+| 16 GB | Gemma 4 12B; Qwen3 8B. Assistenza generica, estrazione, classificazione. |
+| 24–32 GB | Qwen3.6-35B-A3B come tuttofare; Qwen3-Coder 30B per il codice. |
+| 64–128 GB | gpt-oss-120b; Qwen3.5 a 4 bit; DeepSeek-V4-Flash a 3 bit come limite superiore. |
+| Oltre | GLM-5, DeepSeek-V4-Pro: territorio da server multi-GPU con vLLM o SGLang. |
+
+L'errore complementare è il modello che «entra» ma non lascia spazio al contesto: un modello che occupa il 95% della memoria disponibile paginerà su disco alla prima conversazione lunga, a due token al secondo. Lasciare margine per la KV cache fa parte del dimensionamento, non è un dettaglio.
+
+## 9. Locale contro API: il calcolo
+
+La decisione non è ideologica; è un confronto tra quattro fattori misurabili.
+
+<dl>
+<dt>Privacy e vincoli</dt>
+<dd>Se i dati non possono lasciare la macchina — requisito normativo, dato sensibile, ambiente offline — il locale non è un'opzione ma un obbligo, e la domanda diventa solo <em>quale</em> modello locale.</dd>
+<dt>Costo per token</dt>
+<dd>L'API vince a bassi volumi (nessun costo fisso); il locale vince ad alti volumi costanti (il costo marginale è l'elettricità). Il punto di pareggio va calcolato sul proprio consumo reale, non stimato.</dd>
+<dt>Qualità richiesta</dt>
+<dd>Per il ragionamento di frontiera e i task agentici lunghi l'API resta superiore. Per compiti delimitati e ripetitivi la differenza spesso non giustifica il costo.</dd>
+<dt>Latenza e disponibilità</dt>
+<dd>Il locale non ha rate limit, non ha rete di mezzo, non degrada nelle ore di punta. Per pipeline batch notturne è un vantaggio strutturale.</dd>
+</dl>
+
+<div class="ex"><span class="label">Esempio quotidiano</span>
+<p>Una pipeline che classifica 50.000 ticket di supporto a settimana: con un'API frontier costa centinaia di euro al mese e ha rate limit; con Qwen3.6 su una workstation già in azienda costa l'ammortamento dell'hardware. Lo stesso team, per il refactoring agentico del proprio backend, continua sensatamente a usare l'API: là il divario di qualità si paga da solo.</p></div>
+
+## 10. Errori tipici
+
+<ol class="mistakes">
+<li><strong>Scegliere il modello per il benchmark invece che per il task</strong> — e non rifare la scelta a ogni release. Lo strato si muove per scatti trimestrali.</li>
+<li><strong>Ignorare la KV cache nel dimensionamento</strong> — il modello «che entra» e poi pagina su disco al primo contesto lungo.</li>
+<li><strong>Servire traffico concorrente con Ollama</strong> — la coda FIFO va bene per una persona; da dieci utenti in su il runtime giusto è vLLM.</li>
+<li><strong>Quantizzare sotto i 4 bit senza verificare sul proprio caso</strong> — la degradazione su ragionamento e codice non appare nei benchmark generici.</li>
+<li><strong>Confondere parametri attivi e totali di un MoE</strong> — «10B attivi» suona leggero, ma i 230B totali vanno comunque tenuti in memoria.</li>
+<li><strong>Trattare la scelta locale/API come identitaria</strong> — la risposta corretta è quasi sempre entrambi, su compiti diversi.</li>
+</ol>
+
+## 11. Glossario
+
+<dl class="gloss">
+<dt>AWQ</dt><dd>Activation-aware Weight Quantization: schema di quantizzazione GPU che preserva i pesi più rilevanti per le attivazioni.</dd>
+<dt>Continuous batching</dt><dd>Inserimento di nuove richieste nel batch in esecuzione a ogni passo di generazione, senza attendere il completamento del batch.</dd>
+<dt>Decode</dt><dd>Fase di generazione token per token, limitata dalla banda di memoria.</dd>
+<dt>GGUF</dt><dd>Formato file dell'ecosistema llama.cpp: pesi pre-quantizzati e metadati in un file unico.</dd>
+<dt>KV cache</dt><dd>Memoria delle chiavi e dei valori di attention già calcolati; cresce con contesto e concorrenza.</dd>
+<dt>MoE</dt><dd>Mixture-of-Experts: architettura sparsa in cui solo una frazione dei parametri è attiva per ciascun token.</dd>
+<dt>Open weights</dt><dd>Pesi scaricabili e utilizzabili; non implica apertura di dati o ricetta di training.</dd>
+<dt>PagedAttention</dt><dd>Gestione della KV cache a pagine fisse, alla maniera della memoria virtuale; introdotta da vLLM.</dd>
+<dt>Prefill</dt><dd>Elaborazione parallela del prompt di ingresso, limitata dal calcolo; determina il time to first token.</dd>
+<dt>Quantizzazione</dt><dd>Rappresentazione dei pesi con meno bit per parametro, scambiando precisione per memoria e velocità.</dd>
+<dt>RadixAttention</dt><dd>Riuso della KV cache tra richieste che condividono un prefisso; introdotta da SGLang.</dd>
+<dt>Speculative decoding</dt><dd>Bozza di più token da un modello piccolo, verificata in parallelo dal modello grande.</dd>
+<dt>Time to first token</dt><dd>Latenza tra invio del prompt e primo token generato; dominata dal prefill.</dd>
+</dl>
+
+## 12. Autoverifica
+
+<ol class="selfcheck">
+<li>Perché la fase di decode è limitata dalla banda di memoria e non dal calcolo, e quale conseguenza ha sulla scelta dell'hardware?</li>
+<li>Un modello MoE da 235B totali e 22B attivi: quale dei due numeri determina la memoria necessaria, e quale la velocità di generazione?</li>
+<li>Cosa condividono PagedAttention, RadixAttention e il prompt caching delle API commerciali?</li>
+<li>Un servizio interno deve servire 40 sviluppatori con lo stesso system prompt lungo: quale runtime è il candidato naturale, e per quale meccanismo specifico?</li>
+<li>In quali due situazioni la quantizzazione a 3 bit è una scelta difendibile, e come andrebbe verificata?</li>
+</ol>
