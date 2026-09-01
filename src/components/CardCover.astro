@@ -1,0 +1,153 @@
+---
+// Cover generative in stile editoriale: campo di colore caldo + doodle a
+// tratto. Deterministiche (seed = slug), così ogni contenuto tiene la sua
+// cover tra le build. Le dispense ricevono il motivo tematico via `motif`
+// e il numerale serif via `number`.
+
+interface Props {
+  seed: string;
+  section: 'dispense' | 'fondamenta' | 'guide' | 'analisi';
+  motif?: number;
+  number?: string;
+  ghost?: boolean;
+}
+
+const { seed, section, motif, number, ghost = false } = Astro.props;
+
+const hash = [...seed].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
+
+// Campi di colore: palette Formray (coralli e toni caldi) con un solo
+// contrappunto freddo, come le cover del blog Anthropic.
+const grounds = ['#D97757', '#E9C8AC', '#C9C4DF', '#BCC2A3', '#E6DAC3', '#BCCADA'];
+const ground = ghost ? '#F0EEE6' : grounds[hash % grounds.length];
+const ink = ghost ? '#75746E' : '#141413';
+const paper = '#FAF9F5';
+
+// Ogni motivo: pochi tratti, mano libera. Ereditano stroke/fill dal gruppo.
+const motifs: Record<string, string> = {
+  mappa: `
+    <circle cx="72" cy="58" r="4.5" fill="${ink}" stroke="none"/>
+    <circle cx="252" cy="50" r="4.5" fill="${ink}" stroke="none"/>
+    <circle cx="246" cy="152" r="4.5" fill="${ink}" stroke="none"/>
+    <path d="M74 146 C 112 116, 138 160, 174 112 S 232 68, 250 60"/>
+    <path d="M240 72 L 250 60 L 234 57"/>
+    <path d="M64 138 L 84 154 M84 138 L 64 154"/>`,
+  loop: `
+    <path d="M160 52 A 48 48 0 1 1 118 76"/>
+    <path d="M112 60 L 118 76 L 134 68"/>
+    <path d="M160 122 A 22 22 0 1 0 181 94"/>
+    <path d="M188 82 L 181 94 L 170 86"/>`,
+  metodo: `
+    <rect x="108" y="46" width="104" height="112" fill="${paper}"/>
+    <path d="M124 74 H 172 M124 96 H 196 M124 118 H 182"/>
+    <path d="M124 138 L 134 148 L 152 128"/>`,
+  runtime: `
+    <rect x="118" y="62" width="84" height="76" fill="${paper}"/>
+    <path d="M138 62 V 46 M160 62 V 46 M182 62 V 46 M138 138 V 154 M160 138 V 154 M182 138 V 154 M118 84 H 102 M118 116 H 102 M202 84 H 218 M202 116 H 218"/>
+    <circle cx="160" cy="100" r="13"/>`,
+  vettori: `
+    <path d="M96 138 L 138 76 M138 76 L 186 118 M186 118 L 232 62"/>
+    <circle cx="96" cy="138" r="6" fill="${ink}" stroke="none"/>
+    <circle cx="138" cy="76" r="6" fill="${ink}" stroke="none"/>
+    <circle cx="232" cy="62" r="6" fill="${ink}" stroke="none"/>
+    <circle cx="186" cy="118" r="9" fill="${paper}"/>
+    <path d="M186 118 L 226 148" stroke-dasharray="2 9"/>
+    <circle cx="230" cy="151" r="6" fill="${ink}" stroke="none"/>`,
+  sicurezza: `
+    <path d="M160 44 L 214 64 V 108 C 214 142 190 158 160 168 C 130 158 106 142 106 108 V 64 Z" fill="${paper}"/>
+    <path d="M142 104 L 156 118 L 182 88"/>`,
+  evals: `
+    <path d="M100 142 A 62 62 0 0 1 220 142"/>
+    <path d="M104 118 L 114 122 M124 94 L 132 101 M160 80 V 91 M196 94 L 188 101 M216 118 L 206 122"/>
+    <path d="M160 142 L 194 100"/>
+    <circle cx="160" cy="142" r="7" fill="${ink}" stroke="none"/>`,
+  prisma: `
+    <path d="M160 52 L 208 138 H 112 Z" fill="${paper}"/>
+    <path d="M70 104 H 128"/>
+    <path d="M196 92 L 246 74 M204 112 L 252 108 M196 128 L 244 144"/>`,
+  libro: `
+    <path d="M160 70 C 138 57 114 56 100 63 V 138 C 114 131 138 132 160 144 C 182 132 206 131 220 138 V 63 C 206 56 182 57 160 70 Z" fill="${paper}"/>
+    <path d="M160 70 V 142"/>`,
+  orbita: `
+    <ellipse cx="160" cy="100" rx="74" ry="30" transform="rotate(-16 160 100)"/>
+    <circle cx="160" cy="100" r="12" fill="${ink}" stroke="none"/>
+    <circle cx="216" cy="66" r="9" fill="${paper}"/>`,
+  terminale: `
+    <rect x="96" y="54" width="128" height="94" fill="${paper}"/>
+    <path d="M96 76 H 224"/>
+    <circle cx="108" cy="65" r="2.5" fill="${ink}" stroke="none"/>
+    <circle cx="120" cy="65" r="2.5" fill="${ink}" stroke="none"/>
+    <path d="M112 96 L 130 110 L 112 124"/>
+    <path d="M142 124 H 174"/>`,
+  gear: `
+    <circle cx="160" cy="100" r="34"/>
+    <path d="M160 54 V 66 M160 134 V 146 M114 100 H 126 M194 100 H 206 M128 68 L 136 76 M184 124 L 192 132 M192 68 L 184 76 M136 124 L 128 132"/>
+    <circle cx="160" cy="100" r="8" fill="${ink}" stroke="none"/>`,
+  percorso: `
+    <path d="M84 148 C 120 148 118 96 156 96 S 196 52 236 56" stroke-dasharray="1 13"/>
+    <path d="M226 68 L 238 56 L 222 50"/>
+    <circle cx="84" cy="148" r="6" fill="${ink}" stroke="none"/>`,
+  onda: `
+    <path d="M78 100 C 96 54 116 54 136 100 S 176 146 196 100 S 228 62 242 74"/>
+    <circle cx="242" cy="74" r="6" fill="${ink}" stroke="none"/>`,
+  barre: `
+    <path d="M88 152 H 236"/>
+    <rect x="102" y="116" width="24" height="36" fill="${paper}"/>
+    <rect x="138" y="88" width="24" height="64" fill="${paper}"/>
+    <rect x="174" y="102" width="24" height="50" fill="${paper}"/>
+    <rect x="210" y="64" width="24" height="88" fill="${paper}"/>`,
+  lente: `
+    <circle cx="146" cy="88" r="38" fill="${paper}"/>
+    <path d="M174 116 L 216 154"/>
+    <path d="M132 78 A 18 18 0 0 1 148 68"/>`,
+};
+
+const pools: Record<Props['section'], string[]> = {
+  dispense: ['mappa', 'loop', 'metodo', 'runtime', 'vettori', 'sicurezza', 'evals'],
+  fondamenta: ['prisma', 'libro', 'orbita'],
+  guide: ['terminale', 'gear', 'percorso'],
+  analisi: ['onda', 'barre', 'lente'],
+};
+
+const pool = pools[section];
+const name = motif !== undefined ? pool[Math.min(motif, pool.length - 1)] : pool[hash % pool.length];
+const rot = (hash % 13) - 6;
+---
+
+<div class="card-cover" aria-hidden="true" style={`background: ${ground};`}>
+  <svg viewBox="0 0 320 200" preserveAspectRatio="xMidYMid meet" role="presentation">
+    <g
+      transform={`rotate(${rot} 160 100)`}
+      stroke={ink}
+      stroke-width="5"
+      fill="none"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      set:html={motifs[name]}
+    />
+    {number && (
+      <text
+        x="20"
+        y="184"
+        font-family="'Source Serif 4', Georgia, serif"
+        font-size="40"
+        font-weight="500"
+        fill={ink}
+      >{number}</text>
+    )}
+  </svg>
+</div>
+
+<style>
+  .card-cover {
+    aspect-ratio: 16 / 10;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .card-cover svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+</style>

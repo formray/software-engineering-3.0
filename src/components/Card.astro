@@ -1,4 +1,6 @@
 ---
+import CardCover from './CardCover.astro';
+
 interface Props {
   title: string;
   description: string;
@@ -10,9 +12,15 @@ interface Props {
   pill?: string;
   ghost?: boolean;
   delay?: number;
+  idx?: number;
+  coverSection: 'dispense' | 'fondamenta' | 'guide' | 'analisi';
+  coverSeed: string;
 }
 
-const { title, description, eyebrow, href, date, order, readingMin, pill, ghost = false, delay = 0 } = Astro.props;
+const {
+  title, description, eyebrow, href, date, order, readingMin, pill,
+  ghost = false, delay = 0, idx = 0, coverSection, coverSeed,
+} = Astro.props;
 
 const displayDate = date
   ? date
@@ -21,34 +29,44 @@ const displayDate = date
   : null;
 const metaLeft = [displayDate, readingMin ? `${readingMin} min` : null].filter(Boolean).join(' · ');
 const Tag = ghost ? 'div' : 'a';
+const nn = order !== undefined ? String(order).padStart(2, '0') : undefined;
 ---
 
 <Tag
   {...(ghost ? {} : { href })}
   class:list={['mcard', 'rv', { ghost }]}
   style={delay ? `transition-delay: ${delay}ms` : undefined}
+  data-date={date ? date.toISOString().slice(0, 10) : ''}
+  data-title={title.toLowerCase()}
+  data-idx={idx}
 >
-  <span class="m-eyebrow">
-    <span>{eyebrow}</span>
-    {pill && <span class:list={['pill', pill === 'In coda' ? 'pill-coda' : 'pill-nuovo']}>{pill}</span>}
-  </span>
-  {order !== undefined && <span class="m-num">{String(order).padStart(2, '0')}</span>}
-  <span class="m-title">{title}</span>
-  <span class="m-desc">{description}</span>
-  <span class="m-meta">
-    <span>{metaLeft}</span>
-    {!ghost && <span class="m-arrow" aria-hidden="true">→</span>}
-  </span>
+  <CardCover
+    seed={coverSeed}
+    section={coverSection}
+    motif={coverSection === 'dispense' ? order : undefined}
+    number={nn}
+    ghost={ghost}
+  />
+  <div class="m-body">
+    <span class="m-eyebrow">
+      <span>{eyebrow}</span>
+      {pill && <span class:list={['pill', pill === 'In coda' ? 'pill-coda' : 'pill-nuovo']}>{pill}</span>}
+    </span>
+    <span class="m-title">{title}</span>
+    <span class="m-desc">{description}</span>
+    <span class="m-meta">
+      <span>{metaLeft}</span>
+      {!ghost && <span class="m-arrow" aria-hidden="true">→</span>}
+    </span>
+  </div>
 </Tag>
 
 <style>
   .mcard {
     background: var(--paper);
     border: 1px solid var(--line);
-    padding: 1.4rem 1.3rem 1.5rem;
     display: flex;
     flex-direction: column;
-    gap: 0.55rem;
     text-decoration: none;
     color: inherit;
     transition: background 0.18s ease, border-color 0.18s ease, opacity 0.55s ease, transform 0.55s ease;
@@ -57,8 +75,16 @@ const Tag = ghost ? 'div' : 'a';
   a.mcard:hover { background: #ffffff; border-color: var(--ink-3); text-decoration: none; }
 
   .mcard.ghost { opacity: 1; border-style: dashed; background: transparent; }
-  .mcard.ghost .m-title, .mcard.ghost .m-num { color: var(--ink-3); }
+  .mcard.ghost .m-title { color: var(--ink-3); }
   .mcard.ghost .m-desc { color: var(--ink-3); }
+
+  .m-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    padding: 1.15rem 1.3rem 1.3rem;
+    flex-grow: 1;
+  }
 
   .m-eyebrow {
     font-size: 0.68rem;
@@ -70,15 +96,6 @@ const Tag = ghost ? 'div' : 'a';
     justify-content: space-between;
     align-items: baseline;
     gap: 0.5rem;
-  }
-
-  .m-num {
-    font-family: var(--serif);
-    font-size: 2.2rem;
-    font-weight: 500;
-    line-height: 1;
-    color: var(--ink);
-    font-variant-numeric: tabular-nums;
   }
 
   .m-title {

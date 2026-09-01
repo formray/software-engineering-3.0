@@ -30,6 +30,21 @@ const allDates = [...dispense, ...articles, ...guides]
 const lastUpdated = allDates.length
   ? new Date(Math.max(...allDates.map((d) => d.getTime())))
   : new Date();
+
+const sezioni = [
+  { value: 'all', label: 'Tutte le sezioni' },
+  { value: 'dispense', label: 'Dispense' },
+  { value: 'fondamenta', label: 'Fondamenta' },
+  { value: 'guide', label: 'Guide tecniche' },
+  { value: 'analisi', label: 'Analisi puntuali' },
+];
+
+const ordinamenti = [
+  { value: 'editoriale', label: 'Ordine editoriale' },
+  { value: 'recenti', label: 'Più recenti' },
+  { value: 'vecchi', label: 'Più vecchi' },
+  { value: 'az', label: 'A–Z' },
+];
 ---
 
 <BaseLayout title="Home" updated={lastUpdated}>
@@ -42,107 +57,162 @@ const lastUpdated = allDates.length
     </p>
   </header>
 
-  <Search />
+  <div class="browse" id="browse">
+    <aside class="browse-side rv" aria-label="Filtri">
+      <p class="side-head">Filtra e ordina</p>
 
-  <section id="dispense" aria-labelledby="dispense-title">
-    <div class="sec-head rv">
-      <h2 id="dispense-title">Dispense</h2>
-      <span class="sec-note">Serie AI Engineering · In ordine di lettura</span>
-    </div>
-    <div class="cards-grid">
-      {dispense.map((d, i) => (
-        <Card
-          title={d.data.title}
-          description={d.data.description}
-          eyebrow={`Dispensa · ${d.data.argomento}`}
-          href={`${base}/dispense/${d.id}`}
-          date={d.data.date}
-          order={d.data.order}
-          readingMin={readingMin(d.body)}
-          pill={d.data.tag}
-          delay={Math.min(i, 5) * 60}
-        />
-      ))}
-      {inCoda.map((d, i) => (
-        <Card
-          title={d.title}
-          description={d.description}
-          eyebrow={`Dispensa · ${d.argomento}`}
-          order={d.order}
-          pill="In coda"
-          ghost
-          delay={Math.min(dispense.length + i, 7) * 60}
-        />
-      ))}
-    </div>
-  </section>
+      <fieldset class="f-group">
+        <legend>Sezione</legend>
+        {sezioni.map((s, i) => (
+          <label class="f-opt">
+            <input type="radio" name="f-sezione" value={s.value} checked={i === 0} />
+            <span>{s.label}</span>
+          </label>
+        ))}
+      </fieldset>
 
-  <section id="fondamenta" aria-labelledby="fondamenta-title">
-    <div class="sec-head rv">
-      <h2 id="fondamenta-title">Fondamenta</h2>
-      <span class="sec-note">Il paradigma e i principi</span>
-    </div>
-    <div class="cards-grid">
-      {fondamenta.map((a, i) => (
-        <Card
-          title={a.data.title}
-          description={a.data.description}
-          eyebrow={a.data.tag ?? 'Fondamenta'}
-          href={`${base}/articles/${a.id}`}
-          date={a.data.date}
-          readingMin={readingMin(a.body)}
-          delay={Math.min(i, 5) * 60}
-        />
-      ))}
-    </div>
-  </section>
+      <fieldset class="f-group">
+        <legend>Ordina per</legend>
+        {ordinamenti.map((o, i) => (
+          <label class="f-opt">
+            <input type="radio" name="f-ordina" value={o.value} checked={i === 0} />
+            <span>{o.label}</span>
+          </label>
+        ))}
+      </fieldset>
+    </aside>
 
-  <section id="guide" aria-labelledby="guide-title">
-    <div class="sec-head rv">
-      <h2 id="guide-title">Guide tecniche</h2>
-      <span class="sec-note">Setup e strumenti</span>
-    </div>
-    <div class="cards-grid">
-      {guides.map((g, i) => (
-        <Card
-          title={g.data.title}
-          description={g.data.description}
-          eyebrow={g.data.tag ?? 'Guida'}
-          href={`${base}/guides/${g.id}`}
-          date={g.data.date}
-          readingMin={readingMin(g.body)}
-          delay={Math.min(i, 5) * 60}
-        />
-      ))}
-    </div>
-  </section>
+    <div class="browse-main">
+      <div class="toolbar rv">
+        <Search />
+        <div class="view-toggle" role="group" aria-label="Vista">
+          <button type="button" class="view-btn active" data-setview="grid" aria-label="Vista griglia">
+            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M1 1h5v5H1zM8 1h5v5H8zM1 8h5v5H1zM8 8h5v5H8z" fill="currentColor"/></svg>
+            Griglia
+          </button>
+          <button type="button" class="view-btn" data-setview="list" aria-label="Vista elenco">
+            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M1 2.5h12M1 7h12M1 11.5h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            Elenco
+          </button>
+        </div>
+      </div>
 
-  <section id="analisi" aria-labelledby="analisi-title">
-    <div class="sec-head rv">
-      <h2 id="analisi-title">Analisi puntuali</h2>
-      <span class="sec-note">Fotografie datate · Si verificano a scadenza</span>
+      <section data-browse-section="dispense" aria-labelledby="dispense-title" id="dispense">
+        <div class="sec-head rv">
+          <h2 id="dispense-title">Dispense</h2>
+          <span class="sec-note">Serie AI Engineering · In ordine di lettura</span>
+        </div>
+        <div class="cards-grid" data-view="grid">
+          {dispense.map((d, i) => (
+            <Card
+              title={d.data.title}
+              description={d.data.description}
+              eyebrow={`Dispensa · ${d.data.argomento}`}
+              href={`${base}/dispense/${d.id}`}
+              date={d.data.date}
+              order={d.data.order}
+              readingMin={readingMin(d.body)}
+              pill={d.data.tag}
+              delay={Math.min(i, 5) * 60}
+              idx={i}
+              coverSection="dispense"
+              coverSeed={d.id}
+            />
+          ))}
+          {inCoda.map((d, i) => (
+            <Card
+              title={d.title}
+              description={d.description}
+              eyebrow={`Dispensa · ${d.argomento}`}
+              order={d.order}
+              pill="In coda"
+              ghost
+              delay={Math.min(dispense.length + i, 7) * 60}
+              idx={dispense.length + i}
+              coverSection="dispense"
+              coverSeed={d.title}
+            />
+          ))}
+        </div>
+      </section>
+
+      <section data-browse-section="fondamenta" aria-labelledby="fondamenta-title" id="fondamenta">
+        <div class="sec-head rv">
+          <h2 id="fondamenta-title">Fondamenta</h2>
+          <span class="sec-note">Il paradigma e i principi</span>
+        </div>
+        <div class="cards-grid" data-view="grid">
+          {fondamenta.map((a, i) => (
+            <Card
+              title={a.data.title}
+              description={a.data.description}
+              eyebrow={a.data.tag ?? 'Fondamenta'}
+              href={`${base}/articles/${a.id}`}
+              date={a.data.date}
+              readingMin={readingMin(a.body)}
+              delay={Math.min(i, 5) * 60}
+              idx={i}
+              coverSection="fondamenta"
+              coverSeed={a.id}
+            />
+          ))}
+        </div>
+      </section>
+
+      <section data-browse-section="guide" aria-labelledby="guide-title" id="guide">
+        <div class="sec-head rv">
+          <h2 id="guide-title">Guide tecniche</h2>
+          <span class="sec-note">Setup e strumenti</span>
+        </div>
+        <div class="cards-grid" data-view="grid">
+          {guides.map((g, i) => (
+            <Card
+              title={g.data.title}
+              description={g.data.description}
+              eyebrow={g.data.tag ?? 'Guida'}
+              href={`${base}/guides/${g.id}`}
+              date={g.data.date}
+              readingMin={readingMin(g.body)}
+              delay={Math.min(i, 5) * 60}
+              idx={i}
+              coverSection="guide"
+              coverSeed={g.id}
+            />
+          ))}
+        </div>
+      </section>
+
+      <section data-browse-section="analisi" aria-labelledby="analisi-title" id="analisi">
+        <div class="sec-head rv">
+          <h2 id="analisi-title">Analisi puntuali</h2>
+          <span class="sec-note">Fotografie datate · Si verificano a scadenza</span>
+        </div>
+        <div class="cards-grid" data-view="grid">
+          {analisi.map((a, i) => (
+            <Card
+              title={a.data.title}
+              description={a.data.description}
+              eyebrow={a.data.tag ?? 'Analisi'}
+              href={`${base}/articles/${a.id}`}
+              date={a.data.date}
+              readingMin={readingMin(a.body)}
+              delay={Math.min(i, 5) * 60}
+              idx={i}
+              coverSection="analisi"
+              coverSeed={a.id}
+            />
+          ))}
+        </div>
+      </section>
     </div>
-    <div class="cards-grid">
-      {analisi.map((a, i) => (
-        <Card
-          title={a.data.title}
-          description={a.data.description}
-          eyebrow={a.data.tag ?? 'Analisi'}
-          href={`${base}/articles/${a.id}`}
-          date={a.data.date}
-          readingMin={readingMin(a.body)}
-          delay={Math.min(i, 5) * 60}
-        />
-      ))}
-    </div>
-  </section>
+  </div>
 </BaseLayout>
 
 <style>
   .hero {
-    padding: 4.5rem 0 3rem;
+    padding: 4.5rem 0 2.5rem;
     border-bottom: none;
-    margin-bottom: 1.5rem;
+    margin-bottom: 0.5rem;
   }
 
   .hero .eyebrow { margin-bottom: 1.25rem; }
@@ -160,6 +230,55 @@ const lastUpdated = allDates.length
     font-size: 1.2rem;
     max-width: 38rem;
   }
-
-  section { margin-bottom: 1rem; }
 </style>
+
+<script>
+  function initBrowse() {
+    const browse = document.getElementById('browse');
+    if (!browse || (browse as HTMLElement).dataset.ready) return;
+    (browse as HTMLElement).dataset.ready = '1';
+
+    const sections = browse.querySelectorAll<HTMLElement>('[data-browse-section]');
+    const grids = browse.querySelectorAll<HTMLElement>('.cards-grid');
+
+    // Filtro per sezione
+    browse.querySelectorAll<HTMLInputElement>('input[name="f-sezione"]').forEach((input) => {
+      input.addEventListener('change', () => {
+        const v = input.value;
+        sections.forEach((s) => {
+          s.hidden = v !== 'all' && s.dataset.browseSection !== v;
+        });
+      });
+    });
+
+    // Ordinamento (dentro ogni sezione; i contenuti "in coda" restano in fondo)
+    const key = (el: HTMLElement, missing: string) => el.dataset.date || missing;
+    const sorters: Record<string, (a: HTMLElement, b: HTMLElement) => number> = {
+      editoriale: (a, b) => Number(a.dataset.idx) - Number(b.dataset.idx),
+      recenti: (a, b) => key(b, '0000').localeCompare(key(a, '0000')),
+      vecchi: (a, b) => key(a, '9999').localeCompare(key(b, '9999')),
+      az: (a, b) => (a.dataset.title || '').localeCompare(b.dataset.title || '', 'it'),
+    };
+    browse.querySelectorAll<HTMLInputElement>('input[name="f-ordina"]').forEach((input) => {
+      input.addEventListener('change', () => {
+        const sorter = sorters[input.value];
+        if (!sorter) return;
+        grids.forEach((grid) => {
+          const cards = Array.from(grid.children) as HTMLElement[];
+          cards.sort(sorter).forEach((c) => grid.appendChild(c));
+        });
+      });
+    });
+
+    // Vista griglia / elenco
+    const viewButtons = browse.querySelectorAll<HTMLButtonElement>('[data-setview]');
+    viewButtons.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const v = btn.dataset.setview || 'grid';
+        grids.forEach((g) => { g.dataset.view = v; });
+        viewButtons.forEach((b) => b.classList.toggle('active', b === btn));
+      });
+    });
+  }
+  document.addEventListener('astro:page-load', initBrowse);
+</script>

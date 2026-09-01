@@ -26,7 +26,7 @@ Three Zod-validated collections defined in `src/content.config.ts` (glob loaders
 
 ### Routing
 
-- `src/pages/index.astro` — four-section homepage: Dispense (ordered, plus hardcoded `inCoda` ghost cards) · Fondamenta · Guide tecniche · Analisi puntuali. Section anchors `#dispense #fondamenta #guide #analisi` are linked from the site header.
+- `src/pages/index.astro` — four-section homepage: Dispense (ordered, plus hardcoded `inCoda` ghost cards) · Fondamenta · Guide tecniche · Analisi puntuali. Section anchors `#dispense #fondamenta #guide #analisi` are linked from the site header. A «Filtra e ordina» sidebar (section filter + sort: editoriale/recenti/vecchi/A–Z) and a Griglia/Elenco view toggle drive the grids client-side via `data-*` attributes on cards (`data-date`, `data-title`, `data-idx`).
 - `src/pages/dispense/[...slug].astro` — passes prev/next/total for series navigation.
 - `src/pages/articles/[...slug].astro`, `src/pages/guides/[...slug].astro`.
 
@@ -34,7 +34,8 @@ Three Zod-validated collections defined in `src/content.config.ts` (glob loaders
 
 - `BaseLayout.astro` — head (fonts, ClientRouter, light-only meta), site header, footer (`updated` prop), scroll-reveal script.
 - `ArticleLayout.astro` — nests BaseLayout; reading layout with sticky sidebar TOC ≥1100px; `category: 'article' | 'guide' | 'dispensa'`, optional `eyebrow`, `date`, `readingTime`.
-- `Card.astro` — homepage card (props: eyebrow, order → serif numeral, pill, ghost for "in coda").
+- `Card.astro` — homepage card (props: eyebrow, order, pill, ghost for "in coda", coverSection/coverSeed) with a `CardCover` on top.
+- `CardCover.astro` — generative SVG covers, Anthropic-blog style: warm flat ground (Formray palette, one cool counterpoint) + hand-drawn line motif, deterministic per slug (hash). Dispense get a topical motif by `order` (mappa, loop, metodo, runtime, vettori, sicurezza, evals) and the serif numeral; other sections pick from per-section pools. Adding a dispensa beyond order 6 requires a new motif in the pool.
 - MDX components (InfoBox, ProsCons, ComparisonTable, ToolCard, Checklist, Quote, StepHeader, TimelineItem, StatCard, MarketCard, VersionBadge) are token-styled, label-based, emoji-free.
 - Interactive scripts (ProgressBar, CopyCode, BackToTop, Search, reveal) initialize on `astro:page-load` with idempotency guards — required because ClientRouter (View Transitions) is active. Never use bare `DOMContentLoaded`.
 
