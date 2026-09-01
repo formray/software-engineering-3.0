@@ -1,7 +1,7 @@
 ---
 title: "Il Nuovo Paradigma - Python Edition"
 description: "Focus specifico sull'ecosistema Python e come prepararsi al futuro AI-first dello sviluppo software"
-icon: "🐍"
+section: "fondamenta"
 tag: "Analisi"
 date: 2026-01-05
 ---
@@ -17,7 +17,7 @@ import Checklist from '../../components/Checklist.astro';
 
 ---
 
-## 📌 Introduzione
+## Introduzione
 
 <InfoBox type="highlight" title="Il Messaggio di Andrej Karpathy">
   **"Non mi sono mai sentito così indietro come programmatore"**
@@ -43,7 +43,7 @@ Python non è solo il linguaggio dominante per AI/ML - è l'**ecosistema nativo*
 
 ---
 
-## 🐍 Perché Python Governa l'AI
+## Perché Python Governa l'AI
 
 ### I Numeri Parlano Chiaro
 
@@ -84,7 +84,7 @@ Il Python di oggi è molto diverso da quello di 5-10 anni fa:
 
 ---
 
-## 🛠️ Tool per Python AI Development
+## Tool per Python AI Development
 
 ### IDE & Coding Assistants
 
@@ -163,7 +163,7 @@ Il Python di oggi è molto diverso da quello di 5-10 anni fa:
 
 ---
 
-## ⚙️ Setup Python Moderno su Mac
+## Setup Python Moderno su Mac
 
 <StepHeader number={1} title="Python Version Management" />
 
@@ -251,6 +251,55 @@ poetry add --group dev pytest ruff mypy black
 poetry shell
 ```
 
+#### pyproject.toml esempio
+
+```toml
+[tool.poetry]
+name = "my-ai-project"
+version = "0.1.0"
+description = "AI-powered application"
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+python = "^3.12"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+anthropic = "^0.40.0"
+fastapi = "^0.115.0"
+uvicorn = "^0.32.0"
+pydantic = "^2.10.0"
+sqlalchemy = "^2.0.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.0"
+ruff = "^0.8.0"
+mypy = "^1.13.0"
+black = "^24.10.0"
+pytest-cov = "^6.0.0"
+pytest-asyncio = "^0.24.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --cov=src --cov-report=html"
+```
+
 <StepHeader number={3} title="VSCode Setup per Python" />
 
 ```bash
@@ -267,6 +316,38 @@ code --install-extension GitHub.copilot-chat
 code --install-extension tamasfe.even-better-toml
 ```
 
+#### VSCode settings.json per Python
+
+```json
+{
+  // Python
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  "python.terminal.activateEnvironment": true,
+
+  // Linting con Ruff (velocissimo)
+  "ruff.enable": true,
+  "ruff.lint.run": "onSave",
+  "ruff.format.args": ["--line-length", "100"],
+
+  // Type checking
+  "python.analysis.typeCheckingMode": "basic",
+  "python.analysis.autoImportCompletions": true,
+
+  // Testing
+  "python.testing.pytestEnabled": true,
+  "python.testing.unittestEnabled": false,
+
+  // Formatting
+  "editor.formatOnSave": true,
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit"
+    }
+  }
+}
+```
+
 <StepHeader number={4} title="Aider per Python" />
 
 ```bash
@@ -278,6 +359,25 @@ uv tool install aider-chat
 
 # Config per Python
 touch ~/.aider.conf.yml
+```
+
+#### ~/.aider.conf.yml per Python
+
+```yaml
+model: claude-sonnet-4-20250514
+dark-mode: true
+pretty: true
+stream: true
+auto-commits: true
+dirty-commits: false
+attribute-commits: true
+edit-format: diff
+
+# Python specific
+lint-cmd: "ruff check ."
+test-cmd: "pytest"
+auto-lint: true
+auto-test: false  # true se vuoi test automatici
 ```
 
 <StepHeader number={5} title="Configurazione Progetto" />
@@ -305,12 +405,42 @@ Code style:
 - Max line length: 100
 - Use descriptive variable names
 
+When writing code:
+- ALWAYS add type hints to function signatures
+- Use Pydantic for data validation
+- Handle errors with proper exception types
+- Use context managers (with statements)
+- Prefer pathlib over os.path
+- Use f-strings for formatting
+- NEVER use mutable default arguments
+
 Security:
 - Never commit API keys or secrets
 - Validate all inputs with Pydantic
 - Use parameterized queries with SQLAlchemy
 - Follow OWASP Python Security
 - Use secrets module for random values
+
+Testing:
+- Use pytest for all tests
+- Write tests using arrange-act-assert pattern
+- Use fixtures for setup
+- Test edge cases and error paths
+- Aim for >80% coverage
+
+AI/ML specific:
+- Use type hints even for tensors/arrays
+- Document model architectures
+- Version datasets and models
+- Log hyperparameters
+- Handle GPU/CPU fallback
+
+Before committing:
+- Run: ruff check . && ruff format .
+- Run: mypy .
+- Run: pytest
+- Verify no secrets
+- Check diff size (<300 lines)
 ```
 
 <StepHeader number={6} title="Environment Variables" />
@@ -321,6 +451,28 @@ ANTHROPIC_API_KEY=your_key_here
 OPENAI_API_KEY=your_key_here
 DATABASE_URL=postgresql://localhost/mydb
 ENVIRONMENT=development
+
+# .env.example (commit questo)
+ANTHROPIC_API_KEY=sk-ant-xxxxx
+OPENAI_API_KEY=sk-xxxxx
+DATABASE_URL=postgresql://localhost/mydb
+ENVIRONMENT=development
+```
+
+#### Carica con python-dotenv
+
+```python
+# poetry add python-dotenv
+
+# In main.py o config.py
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+if not ANTHROPIC_API_KEY:
+    raise ValueError("ANTHROPIC_API_KEY not set")
 ```
 
 <StepHeader number={7} title="Verifica Setup" />
@@ -354,7 +506,7 @@ pytest --version
 
 ---
 
-## 🔒 Security Python-Specific
+## Security Python-Specific
 
 ### 1. Secrets Management
 
@@ -383,10 +535,20 @@ __pycache__/
 .cursor/
 .continue/
 
+# IDE
+.vscode/
+.idea/
+*.swp
+
 # Testing
 .pytest_cache/
 .coverage
 htmlcov/
+.tox/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb  # se non vuoi committare notebooks
 ```
 
 ### 2. Security Scanning Tools
@@ -405,6 +567,24 @@ safety check
 pip-audit
 ```
 
+#### Integra in pre-commit
+
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/PyCQA/bandit
+    rev: '1.7.10'
+    hooks:
+      - id: bandit
+        args: ['-c', 'pyproject.toml']
+
+  - repo: https://github.com/charliermarsh/ruff-pre-commit
+    rev: 'v0.8.0'
+    hooks:
+      - id: ruff
+      - id: ruff-format
+```
+
 ### 3. Input Validation con Pydantic
 
 ```python
@@ -421,6 +601,17 @@ class UserCreate(BaseModel):
         if not v.isalnum():
             raise ValueError('must be alphanumeric')
         return v
+
+# FastAPI endpoint
+from fastapi import FastAPI, HTTPException
+
+app = FastAPI()
+
+@app.post("/users")
+async def create_user(user: UserCreate):
+    # Pydantic ha già validato tutto
+    # Se arriviamo qui, i dati sono sicuri
+    return {"email": user.email}
 ```
 
 ### 4. SQL Injection Prevention
@@ -434,6 +625,10 @@ db.execute(query)
 from sqlalchemy import select
 stmt = select(User).where(User.email == email)
 result = await session.execute(stmt)
+
+# ✅ OPPURE con parametri (raw SQL)
+query = "SELECT * FROM users WHERE email = :email"
+result = db.execute(query, {"email": email})
 ```
 
 ### 5. Secure Random Values
@@ -463,7 +658,7 @@ api_key = secrets.token_hex(32)
 
 ---
 
-## 🧪 Testing Python Moderno
+## Testing Python Moderno
 
 ### 1. Setup pytest
 
@@ -476,10 +671,13 @@ poetry add --group dev pytest pytest-cov pytest-asyncio pytest-mock
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
 addopts = [
     "-v",
     "--cov=src",
     "--cov-report=html",
+    "--cov-report=term-missing",
     "--cov-fail-under=80"
 ]
 asyncio_mode = "auto"
@@ -501,6 +699,15 @@ async def user_service():
     yield service
     await service.cleanup()
 
+@pytest.fixture
+def sample_user_data():
+    """Sample user data for testing."""
+    return {
+        "email": "test@example.com",
+        "username": "testuser",
+        "age": 25
+    }
+
 class TestUserService:
     """Tests for UserService."""
 
@@ -519,6 +726,38 @@ class TestUserService:
         # Assert
         assert user.email == email
         assert user.id is not None
+        assert user.created_at is not None
+
+    async def test_create_user_duplicate_email(
+        self,
+        user_service: UserService,
+        sample_user_data: dict
+    ):
+        """Test creating user with duplicate email fails."""
+        # Arrange
+        await user_service.create_user(**sample_user_data)
+
+        # Act & Assert
+        with pytest.raises(ValueError, match="Email already exists"):
+            await user_service.create_user(**sample_user_data)
+
+    @pytest.mark.parametrize("invalid_email", [
+        "notanemail",
+        "@example.com",
+        "test@",
+        ""
+    ])
+    async def test_create_user_invalid_email(
+        self,
+        user_service: UserService,
+        sample_user_data: dict,
+        invalid_email: str
+    ):
+        """Test creating user with invalid email fails."""
+        sample_user_data["email"] = invalid_email
+
+        with pytest.raises(ValueError):
+            await user_service.create_user(**sample_user_data)
 ```
 
 ### 3. Testing AI-Generated Code
@@ -533,6 +772,59 @@ def test_email_validation_property(email: str):
     """Property test: all valid emails should be accepted."""
     user_data = {"email": email, "username": "test"}
     validate_user(user_data)
+
+@given(st.text(min_size=1, max_size=100))
+def test_username_never_crashes(username: str):
+    """Property test: any string input shouldn't crash."""
+    # Può fallire validation, ma non deve crashare
+    try:
+        validate_username(username)
+    except ValueError:
+        pass  # Expected for invalid input
+```
+
+### 4. Snapshot Testing
+
+```python
+# poetry add --group dev syrupy
+
+def test_api_response_structure(snapshot):
+    """Snapshot test to catch unexpected API changes."""
+    response = api.get_user(user_id=1)
+    assert response == snapshot
+```
+
+### 5. Coverage Requirements
+
+```bash
+# Esegui tests con coverage
+pytest --cov=src --cov-report=html
+
+# Apri report
+open htmlcov/index.html
+
+# Fail se coverage < 80%
+pytest --cov=src --cov-fail-under=80
+```
+
+### 6. Type Checking come Test
+
+```toml
+# mypy è parte dei test!
+# pyproject.toml
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+```
+
+```yaml
+# In CI/CD
+- name: Type Check
+  run: mypy src/
 ```
 
 <InfoBox type="warning" title="Testing Rules per AI Code">
@@ -546,7 +838,7 @@ def test_email_validation_property(email: str):
 
 ---
 
-## 🔄 Workflow Python + AI
+## Workflow Python + AI
 
 ### Scenario 1: Data Science / ML Prototyping
 
@@ -605,7 +897,7 @@ async def get_users(
 
 ---
 
-## 🤖 AI Frameworks Python
+## AI Frameworks Python
 
 ### LLM SDKs
 
@@ -692,7 +984,7 @@ print(user.name)  # "John Doe" - type-safe!
 
 ---
 
-## 📋 Python Development Policy
+## Python Development Policy
 
 ### Type Hints Policy
 
@@ -707,6 +999,17 @@ def process_data(data):
 # ✅ Accettato
 def process_data(data: str) -> str:
     return data.upper()
+
+# ✅ Per casi complessi
+from typing import TypedDict, Optional, List
+
+class UserDict(TypedDict):
+    name: str
+    age: int
+    email: Optional[str]
+
+def get_users() -> List[UserDict]:
+    ...
 ```
 </InfoBox>
 
@@ -732,9 +1035,56 @@ def process_data(data: str) -> str:
   "Docstrings for public functions"
 ]} />
 
+### CI/CD Pipeline Python
+
+```yaml
+# .github/workflows/python-ci.yml
+name: Python CI
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Poetry
+        run: |
+          curl -sSL https://install.python-poetry.org | python3 -
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        run: poetry install
+
+      - name: Lint with Ruff
+        run: poetry run ruff check .
+
+      - name: Format check
+        run: poetry run ruff format --check .
+
+      - name: Type check with mypy
+        run: poetry run mypy .
+
+      - name: Test with pytest
+        run: poetry run pytest --cov=src --cov-fail-under=80
+
+      - name: Security check
+        run: poetry run bandit -r src/
+```
+
 ---
 
-## 📚 Risorse Python + AI
+## Risorse Python + AI
 
 ### Documentazione Ufficiale
 
@@ -750,9 +1100,23 @@ def process_data(data: str) -> str:
 - **pytest:** [docs.pytest.org](https://docs.pytest.org)
 - **mypy:** [mypy.readthedocs.io](https://mypy.readthedocs.io)
 
+### Learning Resources
+
+- **Python Type Checking:** RealPython guide
+- **FastAPI Tutorial:** official docs
+- **LangChain Academy:** free courses
+- **Pydantic Tutorial:** official tutorial
+
+### Community
+
+- **r/Python:** general Python
+- **r/MachineLearning:** ML discussions
+- **LangChain Discord:** AI framework help
+- **FastAPI Discord:** API development
+
 ---
 
-## 🎯 Conclusioni Python Edition
+## Conclusioni Python Edition
 
 <InfoBox type="highlight" title="Perché Python per AI">
   Python non è solo "un buon linguaggio" per AI - è **il linguaggio**. Ogni breakthrough, ogni nuovo framework, ogni paper di ricerca: tutto nasce in Python.

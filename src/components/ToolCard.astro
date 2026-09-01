@@ -19,58 +19,44 @@ const { title, subtitle, pricing } = Astro.props;
 
 <style>
   .tool-card-component {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    padding: 1.5rem;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 0;
+    padding: 1.35rem 1.5rem;
     margin: 1.25rem 0;
-    transition: all 0.3s ease;
+    transition: border-color 0.18s ease;
   }
 
-  .tool-card-component:hover {
-    border-color: var(--accent-blue);
-    transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-  }
+  .tool-card-component:hover { border-color: var(--ink-3); }
 
   h4 {
-    color: var(--accent-blue);
-    margin: 0 0 0.5rem 0;
-    font-size: 1.2rem;
+    color: var(--ink);
+    font-family: var(--serif);
+    margin: 0 0 0.35rem 0;
+    font-size: 1.15rem;
+    font-weight: 600;
   }
 
   .subtitle {
-    color: var(--accent-purple);
-    font-weight: 600;
-    margin: 0 0 0.75rem 0;
-    font-size: 0.95rem;
+    color: var(--ink-2);
+    font-weight: 500;
+    margin: 0 0 0.6rem 0;
+    font-size: 0.9rem;
   }
 
   .pricing {
     display: inline-block;
-    background: rgba(210, 153, 34, 0.15);
-    color: var(--accent-orange);
-    padding: 0.3rem 0.75rem;
-    border-radius: 4px;
-    font-size: 0.85rem;
-    margin-bottom: 1rem;
+    border: 1px solid var(--line);
+    color: var(--ink-2);
+    padding: 0.2rem 0.6rem;
+    border-radius: 0;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    margin-bottom: 0.75rem;
   }
 
-  .content {
-    color: var(--text-secondary);
-  }
-
-  .content :global(p) {
-    margin: 0.5rem 0;
-  }
-
-  .content :global(ul) {
-    margin: 0.5rem 0;
-    padding-left: 1.25rem;
-  }
-
-  .content :global(li) {
-    color: var(--text-secondary);
-    margin-bottom: 0.4rem;
-  }
+  .content { color: var(--ink); }
+  .content :global(p) { margin: 0.5rem 0; color: var(--ink); }
+  .content :global(ul) { margin: 0.5rem 0; padding-left: 1.25rem; }
+  .content :global(li) { color: var(--ink); margin-bottom: 0.35rem; }
 </style>

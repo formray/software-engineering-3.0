@@ -5,32 +5,10 @@ interface Props {
 }
 
 const { type = 'info', title } = Astro.props;
-
-const colors = {
-  info: { bg: 'rgba(88, 166, 255, 0.1)', border: '#58a6ff', text: '#58a6ff' },
-  success: { bg: 'rgba(63, 185, 80, 0.1)', border: '#3fb950', text: '#3fb950' },
-  warning: { bg: 'rgba(210, 153, 34, 0.15)', border: '#d29922', text: '#d29922' },
-  danger: { bg: 'rgba(248, 81, 73, 0.1)', border: '#f85149', text: '#f85149' },
-  highlight: { bg: 'rgba(163, 113, 247, 0.1)', border: '#a371f7', text: '#a371f7' },
-};
-
-const icons = {
-  info: 'ℹ️',
-  success: '✅',
-  warning: '⚠️',
-  danger: '🚫',
-  highlight: '💡',
-};
-
-const style = colors[type];
 ---
 
-<div class="info-box-component" style={`background: ${style.bg}; border-left-color: ${style.border};`}>
-  {title && (
-    <h4 style={`color: ${style.text};`}>
-      <span class="icon">{icons[type]}</span> {title}
-    </h4>
-  )}
+<div class:list={['info-box-component', `ib-${type}`]}>
+  {title && <span class="ib-label">{title}</span>}
   <div class="content">
     <slot />
   </div>
@@ -38,45 +16,40 @@ const style = colors[type];
 
 <style>
   .info-box-component {
-    border: 1px solid var(--border-color);
-    border-left: 4px solid;
-    border-radius: 0 8px 8px 0;
-    padding: 1.25rem 1.5rem;
+    border-left: 2px solid var(--ink);
+    border-radius: 0;
+    padding: 1.1rem 1.35rem;
     margin: 1.5rem 0;
+    background: var(--panel);
   }
 
-  .info-box-component h4 {
-    margin: 0 0 0.75rem 0;
-    font-size: 1.1rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
+  .ib-info { background: var(--panel); border-left-color: var(--ink); }
+  .ib-highlight { background: var(--panel); border-left-color: var(--accent); }
+  .ib-success { background: var(--ok-bg); border-left-color: var(--ok); }
+  .ib-warning { background: var(--warn-bg); border-left-color: var(--warn); }
+  .ib-danger { background: var(--danger-bg); border-left-color: var(--danger); }
+
+  .ib-label {
+    display: block;
+    font-family: var(--sans);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    margin-bottom: 0.45rem;
   }
 
-  .icon {
-    font-size: 1rem;
-  }
+  .ib-info .ib-label { color: var(--ink-2); }
+  .ib-highlight .ib-label { color: var(--accent-deep); }
+  .ib-success .ib-label { color: var(--ok); }
+  .ib-warning .ib-label { color: var(--warn); }
+  .ib-danger .ib-label { color: var(--danger); }
 
-  .content {
-    color: var(--text-primary);
-  }
+  .content { color: var(--ink); }
 
-  .content :global(p) {
-    margin: 0;
-    color: var(--text-primary);
-  }
-
-  .content :global(p:not(:last-child)) {
-    margin-bottom: 0.75rem;
-  }
-
-  .content :global(ul) {
-    margin: 0.5rem 0 0 0;
-    padding-left: 1.25rem;
-  }
-
-  .content :global(li) {
-    color: var(--text-primary);
-    margin-bottom: 0.4rem;
-  }
+  .content :global(p) { margin: 0; color: var(--ink); }
+  .content :global(p:not(:last-child)) { margin-bottom: 0.75rem; }
+  .content :global(ul), .content :global(ol) { margin: 0.5rem 0 0 0; padding-left: 1.25rem; }
+  .content :global(li) { color: var(--ink); margin-bottom: 0.4rem; }
+  .content :global(pre) { margin: 0.75rem 0 0; }
 </style>

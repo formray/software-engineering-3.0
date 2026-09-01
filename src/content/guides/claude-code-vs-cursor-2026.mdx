@@ -1,0 +1,87 @@
+---
+title: "Claude Code vs Cursor — Edizione Agosto 2026"
+description: "Rifacimento completo del confronto 2025 da fonti multiple verificate: pricing, modelli, mercato e quando scegliere cosa."
+tag: "Confronto"
+date: 2026-08-31
+---
+
+import InfoBox from '../../components/InfoBox.astro';
+
+*Ultima revisione: 29 agosto 2026 · Sostituisce il confronto di luglio 2025 · Prezzi e dati soggetti a cambiamento trimestrale — riverificare prima di decidere.*
+
+## Perché il documento del 2025 va buttato
+
+Il confronto precedente si basava su un articolo Qodo di luglio 2025 — fonte di parte (competitor di entrambi) — e su uno stato del mondo che non esiste più. In tredici mesi è cambiato quasi tutto:
+
+- Il pricing di Cursor è stato ristrutturato due volte (agosto 2025 e giugno–luglio 2026): i «flat tier» descritti nel vecchio documento non esistono più, il modello è a pool di utilizzo, come per Claude.
+- Cursor ha smesso di essere solo un wrapper di modelli altrui: la famiglia di modelli propri **Composer** (Composer 2 a marzo 2026, oggi 2.5) copre gran parte dell'uso quotidiano.
+- Anthropic ha raddoppiato i limiti di sessione di Claude Code (maggio 2026) e ha rinnovato la gamma modelli: la generazione in uso oggi — Fable 5, Opus 4.8, Sonnet 5, Haiku 4.5 — non compare nel vecchio documento.
+- Il confronto «200K affidabili vs 70–120K usabili» sulle context window descriveva la situazione di metà 2025; oggi non è un asse discriminante tra i due prodotti.
+- Cursor ha iniziato a espandersi oltre l'editor: **Origin**, piattaforma di code hosting con PR e sync GitHub bidirezionale, è in beta da metà agosto 2026, inclusa nei piani a pagamento.
+
+## TL;DR
+
+<InfoBox type="highlight" title="In sintesi">
+**Claude Code**: agente terminal-first (oggi anche desktop e mobile), delega di task multi-step, il più amato dagli sviluppatori nei sondaggi 2026, un solo fornitore di modelli. **Cursor**: IDE AI-first (fork VS Code), editing multi-file inline velocissimo, modelli propri più routing verso terzi, agenti in background paralleli. Non sono più alternative: il pattern dominante del 2026 è usarli per compiti diversi — la media è 3,1 strumenti AI per sviluppatore.
+</InfoBox>
+
+## I due prodotti, oggi
+
+### Claude Code
+
+- **Forma:** CLI nel terminale, app desktop, accesso remoto da mobile; integrato con l'ecosistema Claude (Cowork, skills, MCP, Claude Tag su Slack).
+- **Modello di lavoro:** agentico — legge l'albero dei file, esegue comandi, itera su task multi-step con verifica. Configurazione per progetto via `CLAUDE.md`, permessi e hook.
+- **Modelli:** solo Anthropic. Gamma attuale: Fable 5 (flagship, giugno 2026), Opus 4.8, Sonnet 5, Haiku 4.5.
+- **Limiti d'uso:** quota condivisa con le app Claude — finestra di 5 ore più limite settimanale. I limiti di sessione sono stati raddoppiati a maggio 2026 e il throttling nelle ore di punta rimosso. Per automazioni e CI la via corretta è la chiave API (nessun limite di sessione, batch a metà prezzo).
+
+### Cursor
+
+- **Forma:** editor completo, fork di VS Code — estensioni, temi e keybinding migrano. Dal 2026 anche piattaforma: Origin (hosting, PR, code review) in beta.
+- **Modello di lavoro:** AI cablata in ogni parte dell'editor — tab completion, edit inline, Composer per modifiche multi-file, Agent mode, agenti in background paralleli.
+- **Modelli:** propri (famiglia Composer, oggi 2.5 — Composer 2 è nato a marzo 2026 con continued pretraining su Kimi K2.5) più routing verso Claude, GPT e Gemini nel pool «terze parti».
+- **Limiti d'uso:** due pool separati per piano — modelli propri e API di terze parti. Al superamento non c'è blocco: si viene instradati su modelli più lenti.
+
+## Pricing — verificato agosto 2026
+
+| Piano | Claude Code | Cursor |
+|---|---|---|
+| Ingresso individuale | Pro — 20 $/mese (17 $ annuale); include Claude Code, app Claude e Cowork sulla stessa quota | Pro — 20 $/mese; due pool di utilizzo (Composer + terze parti) |
+| Fascia intensiva | Max 5x — 100 $/mese; Max 20x — 200 $/mese | Pro+ — 60 $/mese; Ultra — 160 $/mese |
+| Team | Team (seat Premium ~100–125 $/utente con Claude Code) | Standard 40 $/utente; Premium 120 $/utente (5× uso) — riprezzato luglio 2026, uso in pool condiviso |
+| Oltre i limiti | Bundle prepagati (sconto fino al 30%) o chiave API a consumo | On-demand a tariffe API, o instradamento su modelli più lenti |
+| Incluso extra | Tutto l'ecosistema Claude (chat, Cowork, integrazioni Office) | Origin (hosting repo, PR, sync GitHub) in beta, senza costo separato |
+
+<InfoBox type="warning" title="Avvertenza strutturale">
+Entrambi i prodotti hanno ormai un pricing a consumo mascherato da abbonamento: il prezzo mensile compra un pool di utilizzo, e il costo reale dipende da modelli scelti e volume. Qualunque confronto «X costa più di Y» senza il proprio profilo d'uso è privo di significato. È anche il motivo per cui questo documento scade in fretta.
+</InfoBox>
+
+## Il mercato attorno ai due — i numeri del 2026
+
+- Mercato degli strumenti AI di coding: circa **12,8 miliardi di dollari** nel 2026, più che raddoppiato dal 2024. L'85–90% degli sviluppatori usa regolarmente almeno uno strumento AI.
+- **Adozione sul lavoro** (JetBrains, gennaio 2026): Copilot 29%, Cursor 18%, Claude Code 18% — con Claude Code passato dal 3% al 18% in meno di un anno.
+- **Soddisfazione** (JetBrains, aprile 2026): Claude Code «most loved» al 46%, Cursor 19%, Copilot 9%.
+- **Scala commerciale:** Cursor oltre 2 miliardi di ARR (marzo 2026, raddoppiati in un trimestre) e trattative di round attorno ai 50 miliardi di valutazione; Claude Code a 2,5 miliardi di run rate a febbraio 2026; Copilot resta il più diffuso per utenti (26M+, 4,7M paganti), forte nelle enterprise sopra i 10.000 dipendenti (56%).
+- **Il dato scomodo:** la fiducia degli sviluppatori nell'output AI è al 29%, in calo; lo studio controllato METR ha misurato sviluppatori esperti più lenti del 19% con AI pur percependosi più veloci del 20%. L'adozione è universale, il beneficio non è automatico: dipende dal processo di verifica, non dallo strumento.
+
+## Quando scegliere cosa
+
+| Compito | Strumento più adatto | Perché |
+|---|---|---|
+| Refactoring profondo, task delegabili multi-step, automazione CI | Claude Code | Modello di lavoro agentico con esecuzione e verifica; scriptabile; configurazione per repo. |
+| Editing rapido multi-file con feedback visivo immediato | Cursor | Composer è ottimizzato esattamente per questo; latenza bassa perché il modello è di casa. |
+| Completamento inline durante la scrittura | Cursor (o Copilot nell'IDE esistente) | Claude Code non compete su questo piano: non è un motore di completamento. |
+| Lavoro dentro JetBrains / WebStorm | Claude Code + Copilot | Cursor è un fork di VS Code: adottarlo significa cambiare editor, non aggiungere uno strumento. |
+| Multi-modello per policy o preferenza | Cursor (o Copilot) | Claude Code è mono-fornitore per costruzione. |
+| Agenti in parallelo su task indipendenti | Entrambi, con filosofie diverse | Cursor: background agents nell'editor. Claude Code: sessioni/worktree paralleli e code via API. |
+
+## Verdetto per il caso concreto
+
+La domanda in sospeso da mesi era: aggiungere Cursor allo stack attuale (Claude Code come primario, Copilot multi-model, WebStorm come IDE principale)? Con i dati di agosto 2026, il verdetto è articolato in tre punti:
+
+1. **Il costo vero di Cursor, in questo stack, non sono i 20 dollari: è l'editor.** Cursor vale per l'integrazione profonda nel proprio fork di VS Code. Per un flusso di lavoro centrato su WebStorm, la parte migliore del prodotto resta inutilizzata, e il completamento inline è già coperto da Copilot.
+2. **La sovrapposizione con Claude Code è alta dove Claude Code è più forte.** Il refactoring agentico e la delega multi-step — il motivo per cui Claude Code è primario in questo stack — sono l'area dove Cursor insegue, non dove distanzia.
+3. **Il caso residuo esiste ed è misurabile:** sessioni intense di editing multi-file esplorativo, dove Composer con feedback visivo è oggettivamente più fluido del ciclo terminale. Se nelle settimane tipiche questo pattern è frequente, un mese di Pro a 20 $ è un esperimento a basso costo con criteri chiari: si rinnova solo se sostituisce ore reali, non se «piace».
+
+<InfoBox type="info" title="Nota di metodo">
+Il vecchio documento andava rifatto anche per una ragione di igiene: era basato su una fonte sola, di parte. Questa edizione incrocia dati di pricing verificati sui listini, due survey JetBrains indipendenti e report di mercato multipli. Alla prossima revisione (indicativamente dicembre 2026), pretendere lo stesso standard.
+</InfoBox>

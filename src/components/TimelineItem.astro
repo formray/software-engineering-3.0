@@ -21,9 +21,9 @@ const { period, title } = Astro.props;
 <style>
   .timeline-item {
     position: relative;
-    padding-left: 2.5rem;
-    padding-bottom: 2rem;
-    border-left: 2px solid var(--border-color);
+    padding-left: 2.2rem;
+    padding-bottom: 1.8rem;
+    border-left: 1px solid var(--line);
   }
 
   .timeline-item:last-child {
@@ -33,43 +33,33 @@ const { period, title } = Astro.props;
 
   .timeline-marker {
     position: absolute;
-    left: -8px;
-    top: 0;
-    width: 14px;
-    height: 14px;
-    background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
-    border-radius: 50%;
-    border: 2px solid var(--bg-primary);
+    left: -6px;
+    top: 0.3rem;
+    width: 11px;
+    height: 11px;
+    background: var(--paper);
+    border: 1.5px solid var(--accent-deep);
   }
 
   .period {
     display: inline-block;
-    background: rgba(88, 166, 255, 0.1);
-    color: var(--accent-blue);
-    padding: 0.2rem 0.6rem;
-    border-radius: 4px;
-    font-size: 0.8rem;
-    font-weight: 600;
-    margin-bottom: 0.5rem;
+    font-family: var(--mono);
+    color: var(--accent-deep);
+    font-size: 0.75rem;
+    font-weight: 500;
+    margin-bottom: 0.35rem;
   }
 
   h4 {
-    color: var(--text-primary);
-    margin: 0 0 0.5rem 0;
+    color: var(--ink);
+    font-family: var(--serif);
+    margin: 0 0 0.4rem 0;
     font-size: 1.1rem;
+    font-weight: 600;
   }
 
-  .description {
-    color: var(--text-secondary);
-    font-size: 0.95rem;
-  }
-
-  .description :global(p) {
-    margin: 0.25rem 0;
-  }
-
-  .description :global(ul) {
-    margin: 0.5rem 0;
-    padding-left: 1.25rem;
-  }
+  .description { color: var(--ink-2); font-size: 0.95rem; }
+  .description :global(p) { margin: 0.25rem 0; }
+  .description :global(ul) { margin: 0.5rem 0; padding-left: 1.25rem; }
+  .description :global(pre) { margin: 0.75rem 0; }
 </style>

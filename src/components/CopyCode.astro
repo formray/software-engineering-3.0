@@ -1,23 +1,22 @@
 ---
-// This component adds copy buttons to all code blocks
+// Aggiunge il pulsante di copia a tutti i blocchi di codice.
 ---
 
-<script is:inline>
-  document.addEventListener('DOMContentLoaded', () => {
+<script>
+  function initCopyButtons() {
     const codeBlocks = document.querySelectorAll('pre');
 
     codeBlocks.forEach((pre) => {
-      // Create wrapper
+      if (pre.parentElement?.classList.contains('code-block-wrapper')) return;
+
       const wrapper = document.createElement('div');
       wrapper.className = 'code-block-wrapper';
-      pre.parentNode.insertBefore(wrapper, pre);
+      pre.parentNode?.insertBefore(wrapper, pre);
       wrapper.appendChild(pre);
 
-      // Create copy button
       const button = document.createElement('button');
       button.className = 'copy-button';
-      button.innerHTML = '📋';
-      button.title = 'Copia codice';
+      button.textContent = 'Copia';
       button.setAttribute('aria-label', 'Copia codice');
 
       button.addEventListener('click', async () => {
@@ -25,26 +24,23 @@
         const text = code ? code.textContent : pre.textContent;
 
         try {
-          await navigator.clipboard.writeText(text);
-          button.innerHTML = '✓';
+          await navigator.clipboard.writeText(text ?? '');
+          button.textContent = 'Copiato';
           button.classList.add('copied');
-
           setTimeout(() => {
-            button.innerHTML = '📋';
+            button.textContent = 'Copia';
             button.classList.remove('copied');
           }, 2000);
         } catch (err) {
-          console.error('Failed to copy:', err);
-          button.innerHTML = '❌';
-          setTimeout(() => {
-            button.innerHTML = '📋';
-          }, 2000);
+          button.textContent = 'Errore';
+          setTimeout(() => { button.textContent = 'Copia'; }, 2000);
         }
       });
 
       wrapper.appendChild(button);
     });
-  });
+  }
+  document.addEventListener('astro:page-load', initCopyButtons);
 </script>
 
 <style is:global>
@@ -54,31 +50,37 @@
 
   .copy-button {
     position: absolute;
-    top: 0.5rem;
-    right: 0.5rem;
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    padding: 0.35rem 0.5rem;
+    top: 0.55rem;
+    right: 0.55rem;
+    background: transparent;
+    color: #A8A6A0;
+    border: 1px solid #3A3A38;
+    border-radius: 0;
+    padding: 0.2rem 0.55rem;
     cursor: pointer;
-    font-size: 0.9rem;
+    font-family: var(--sans);
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
     opacity: 0;
-    transition: all 0.2s ease;
+    transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease;
     z-index: 10;
   }
 
-  .code-block-wrapper:hover .copy-button {
+  .code-block-wrapper:hover .copy-button,
+  .copy-button:focus-visible {
     opacity: 1;
   }
 
   .copy-button:hover {
-    background: var(--bg-secondary);
-    border-color: var(--accent-blue);
+    color: #FAF9F5;
+    border-color: #A8A6A0;
   }
 
   .copy-button.copied {
-    background: var(--accent-green);
-    border-color: var(--accent-green);
-    color: white;
+    color: var(--accent);
+    border-color: var(--accent);
+    opacity: 1;
   }
 </style>

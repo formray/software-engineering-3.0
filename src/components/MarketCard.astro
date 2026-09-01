@@ -9,18 +9,18 @@ interface Props {
 const { name, tier = 'other', stats = [], badge } = Astro.props;
 
 const tierColors = {
-  leader: { bg: 'rgba(63, 185, 80, 0.1)', border: 'var(--accent-green)', text: 'var(--accent-green)' },
-  challenger: { bg: 'rgba(210, 153, 34, 0.1)', border: 'var(--accent-orange)', text: 'var(--accent-orange)' },
-  other: { bg: 'var(--bg-secondary)', border: 'var(--border-color)', text: 'var(--accent-blue)' },
+  leader: { bg: 'var(--ok-bg)', border: 'var(--ok)', text: 'var(--ok)' },
+  challenger: { bg: 'var(--warn-bg)', border: 'var(--warn)', text: 'var(--warn)' },
+  other: { bg: 'var(--panel)', border: 'var(--line)', text: 'var(--ink)' },
 };
 
 const colors = tierColors[tier];
 ---
 
-<div class="market-card" style={`background: ${colors.bg}; border-color: ${colors.border};`}>
+<div class="market-card" style={`background: ${colors.bg}; border-left-color: ${colors.border};`}>
   <div class="header">
     <h4 style={`color: ${colors.text};`}>{name}</h4>
-    {badge && <span class="badge">{badge}</span>}
+    {badge && <span class="mc-badge">{badge}</span>}
   </div>
   {stats.length > 0 && (
     <ul class="stats-list">
@@ -34,65 +34,53 @@ const colors = tierColors[tier];
 
 <style>
   .market-card {
-    border: 1px solid;
-    border-radius: 12px;
-    padding: 1.25rem 1.5rem;
+    border: none;
+    border-left: 2px solid;
+    border-radius: 0;
+    padding: 1.15rem 1.4rem;
     margin: 1rem 0;
-    transition: all 0.2s ease;
-  }
-
-  .market-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
   }
 
   .header {
     display: flex;
-    align-items: center;
+    align-items: baseline;
     justify-content: space-between;
     gap: 1rem;
-    margin-bottom: 0.75rem;
+    margin-bottom: 0.6rem;
   }
 
   h4 {
     margin: 0;
-    font-size: 1.15rem;
+    font-family: var(--serif);
+    font-size: 1.1rem;
+    font-weight: 600;
   }
 
-  .badge {
-    background: rgba(163, 113, 247, 0.2);
-    color: var(--accent-purple);
-    padding: 0.25rem 0.75rem;
-    border-radius: 1rem;
-    font-size: 0.75rem;
+  .mc-badge {
+    font-family: var(--sans);
+    border: 1px solid currentColor;
+    color: var(--ink-2);
+    padding: 0.15rem 0.5rem;
+    border-radius: 0;
+    font-size: 0.66rem;
     font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
     white-space: nowrap;
   }
 
   .stats-list {
     list-style: none;
     padding: 0;
-    margin: 0 0 0.75rem 0;
+    margin: 0 0 0.6rem 0;
   }
 
   .stats-list li {
-    color: var(--text-secondary);
+    color: var(--ink-2);
     font-size: 0.9rem;
-    padding: 0.2rem 0;
+    margin-bottom: 0.25rem;
   }
 
-  .stats-list li::before {
-    content: "•";
-    color: var(--text-muted);
-    margin-right: 0.5rem;
-  }
-
-  .content {
-    color: var(--text-secondary);
-    font-size: 0.95rem;
-  }
-
-  .content :global(p) {
-    margin: 0.5rem 0;
-  }
+  .content { color: var(--ink); font-size: 0.95rem; }
+  .content :global(p) { margin: 0.4rem 0; }
 </style>
