@@ -1,26 +1,235 @@
 ---
 title: "Database vettoriali"
-description: "Dall'ipotesi distribuzionale a HNSW: cosa sono gli embedding, come un indice a grafo li rende interrogabili, come Qdrant li organizza, e dove lo strato si sta muovendo nell'era degli agenti."
+description: "Dalle fondamenta alla pratica, con Qdrant come caso di studio: la storia della ricerca semantica, gli embedding, HNSW, la quantizzazione, RAG e le decisioni di architettura. Edizione estesa."
 order: 4
 argomento: "Retrieval"
 date: 2026-08-29
 tag: "Nuova"
 ---
 
-*Edizione di riferimento · Ultima revisione: 29 agosto 2026 · Prerequisiti: esperienza con database tradizionali; nessuna conoscenza pregressa di ML.*
+*Edizione di riferimento estesa · Ultima revisione: 29 agosto 2026 · Prerequisiti: esperienza con database tradizionali; nessuna conoscenza pregressa di ML.*
 
-<p class="part">Parte I · I concetti</p>
+<div class="box key">
+  <span class="label">Il caso di studio</span>
+  <p>Il caso che attraversa tutta la guida è reale: <strong>disctale</strong>, un archivio musicale in sviluppo — copertine, recensioni e metadati di dischi — con backend Rust e Qdrant, il cui codice sarà pubblicato open source. Dove si parla di disctale, si legga «un archivio di dischi interrogabile per somiglianza»: ogni scelta discussa vale per qualunque sistema della stessa famiglia.</p>
+</div>
 
-## 1. Il cambio di paradigma
+<p class="part">Parte I · Il problema</p>
 
-Un database relazionale, e in larga misura anche un document store, risponde a domande di **corrispondenza esatta**: righe dove `status = 'active'`, documenti dove il titolo contiene una parola. La domanda «quali elementi *somigliano* a questo?» non è esprimibile in quel paradigma, perché la somiglianza non è un predicato booleano: è una distanza.
+## 1. Cosa fa davvero un database
 
-Un database vettoriale risponde esattamente a quella domanda. Ogni elemento è rappresentato da un punto in uno spazio a centinaia di dimensioni, e la query non chiede «dove la condizione è vera» ma «quali punti sono più vicini a questo». La rilevanza smette di essere un filtro e diventa una geometria.
+Prima di capire cosa cambia con i vettori, serve essere onesti su cosa un database ha sempre fatto: **rispondere a domande di appartenenza a un insieme**.
 
-<div class="ex"><span class="label">Esempio quotidiano</span>
-<p>Un archivio di ticket di supporto. Con la full-text search, «l'app si blocca all'avvio» non trova «crash immediato dopo il login»: zero parole in comune. Con la ricerca vettoriale li trova: i due testi occupano quasi lo stesso punto dello spazio semantico, perché descrivono lo stesso problema.</p></div>
+Quando scrivi:
 
-## 2. Cos'è un embedding
+```sql
+SELECT * FROM dischi WHERE anno = 1977 AND genere = 'punk';
+```
+
+stai chiedendo: quali righe appartengono contemporaneamente all'insieme "anno uguale a 1977" e all'insieme "genere uguale a punk". La risposta è binaria per ogni riga: dentro o fuori. Non esiste una riga "abbastanza del 1977".
+
+Questa è la natura profonda dei database così come li conosciamo, e vale la pena ripercorrerne la storia perché spiega perché il salto ai vettori è stato culturalmente difficile.
+
+### 1.1 La preistoria: gerarchici e reticolari (1960-1970)
+
+I primi database veri furono IMS di IBM (1966, costruito per il programma Apollo) e i sistemi CODASYL. Il modello era gerarchico: i dati erano alberi, e per trovare qualcosa dovevi conoscere il percorso fisico per arrivarci. Cambiare la struttura significava riscrivere le applicazioni. Era un incubo di manutenzione.
+
+### 1.2 Codd e la rivoluzione relazionale (1970)
+
+Nel 1970 Edgar F. Codd, matematico di IBM, pubblica *A Relational Model of Data for Large Shared Data Banks*. L'idea è radicale: separare **cosa** vuoi dai dati da **come** il sistema va a prenderlo. I dati diventano tabelle, le relazioni diventano operazioni di algebra relazionale (selezione, proiezione, join), e nasce SQL.
+
+Il potere del modello relazionale sta nell'algebra: ogni query è composta da operatori che restituiscono insiemi, e gli insiemi si combinano in modo prevedibile. Questa prevedibilità è ciò che ha permesso ai query planner di diventare così sofisticati. Il database può riscrivere la tua query in una forma equivalente ma più veloce, perché la matematica sottostante garantisce che il risultato sia identico.
+
+Il costo di questo potere: tutto deve essere esprimibile come predicato booleano.
+
+### 1.3 Gli indici: come si evita di leggere tutto
+
+Un database senza indici deve fare un *full scan*: legge ogni riga e controlla la condizione. Complessità O(n). Su dieci milioni di righe è inaccettabile.
+
+L'indice risolve il problema pre-ordinando i dati. Il **B-tree** (Bayer e McCreight, 1972) è la struttura dominante da cinquant'anni: un albero bilanciato dove ogni nodo contiene molte chiavi ordinate, progettato per minimizzare le letture da disco. Cercare un valore costa O(log n). Su dieci milioni di righe significa circa 23 confronti invece di dieci milioni.
+
+Il B-tree funziona perché sfrutta una proprietà precisa: **l'ordine totale**. I numeri si ordinano, le stringhe si ordinano alfabeticamente, le date si ordinano. Dato un valore, sai sempre se è prima o dopo un altro, e quindi puoi scartare metà dell'albero a ogni passo.
+
+Tieni a mente questa frase, perché è il punto esatto dove tutto si rompe più avanti.
+
+L'**hash index** fa un'altra scelta: trasforma la chiave in un numero e usa quel numero come indirizzo. Lookup in O(1), ma solo per uguaglianza esatta. Non puoi fare range query su un hash index.
+
+### 1.4 NoSQL: flessibilità, non semantica (2007-2015)
+
+Negli anni 2000 il web rompe alcune assunzioni del modello relazionale: schemi rigidi, scalabilità verticale, join costosi su cluster distribuiti. Nascono i NoSQL, e con essi MongoDB (2009).
+
+MongoDB sostituisce la tabella con la collection e la riga con il documento BSON. Guadagni schema flessibile, scaling orizzontale nativo, denormalizzazione conveniente. Ma la logica di interrogazione resta identica nella sostanza:
+
+```javascript
+db.dischi.find({ anno: 1977, genere: "punk" })
+```
+
+È sempre appartenenza a un insieme. È sempre un B-tree sotto (MongoDB usa B-tree su WiredTiger). NoSQL ha cambiato il **modello dei dati**, non il **modello della ricerca**.
+
+Questo è un punto che confonde molti: si tende a pensare che vector database sia "il prossimo passo dopo NoSQL". Non lo è. È una categoria ortogonale, che risolve un problema diverso.
+
+## 2. Il muro della ricerca esatta
+
+Prendiamo un caso concreto, dal caso di studio.
+
+Hai un archivio di copertine di dischi e recensioni. Un utente cerca:
+
+> "quella copertina anni Ottanta tutta nera con la geometria al centro"
+
+Prova a scrivere questa query in SQL. Non puoi. Non perché SQL sia limitato sintatticamente, ma perché **il concetto di "quella cosa lì" non è un predicato booleano su un campo**.
+
+Potresti provare a taggare manualmente: `colore_dominante = 'nero'`, `decade = 1980`, `stile = 'geometrico'`. Funziona, con tre problemi fatali:
+
+1. **Qualcuno deve taggare tutto.** Su centomila copertine è un lavoro impossibile.
+2. **La tassonomia è sempre sbagliata.** Chi decide che quella copertina è "geometrica" e non "minimalista"? E se l'utente cerca "astratta"?
+3. **Non scala alla combinazione.** L'utente non cerca tag, cerca un'impressione complessiva che nessuna lista di attributi cattura.
+
+### 2.1 Il problema del vocabolario
+
+Il problema ha un nome in letteratura: **vocabulary mismatch problem**, studiato da Furnas e colleghi in un lavoro del 1987 che è ancora il riferimento. Il risultato empirico è brutale: due persone scelgono la stessa parola per descrivere lo stesso oggetto meno del 20% delle volte.
+
+Tradotto: se il tuo sistema cerca per parole, sbaglia quattro volte su cinque per ragioni che non hanno nulla a che fare con la qualità dei dati.
+
+Esempi nel dominio musicale:
+
+| L'utente scrive | Nel database c'è |
+|---|---|
+| "musica elettronica ripetitiva" | "minimal techno" |
+| "canzone triste al pianoforte" | "ballad, solo piano, malinconica" |
+| "come i Kraftwerk ma moderno" | (nessun campo lo esprime) |
+| "copertina inquietante" | "dark ambient artwork" |
+
+Nessuna di queste query trova nulla con un `LIKE` o un match esatto. Eppure per un essere umano sono richieste chiarissime.
+
+### 2.2 Perché non basta il full-text search
+
+L'obiezione ovvia: ma esiste il full-text search. MongoDB ha `$text`, PostgreSQL ha `tsvector`, Elasticsearch esiste da anni.
+
+Il full-text search classico risolve una parte del problema (variazioni morfologiche, stemming, stop word) ma non tocca il nucleo: **lavora ancora su token, non su significato**. Se il documento non contiene letteralmente la parola cercata o una sua variante morfologica, non lo trovi.
+
+"Automobile" e "macchina" restano due token diversi. "Sad" e "melancholic" restano due token diversi. Nessuno stemming li unisce, perché non sono la stessa parola: sono lo stesso *concetto*.
+
+## 3. I tentativi intermedi: TF-IDF e BM25
+
+Prima di arrivare ai vettori densi, vale la pena capire cosa c'era prima, perché non è morto e anzi sta tornando in forma ibrida.
+
+### 3.1 TF-IDF (anni Settanta)
+
+L'idea: pesare le parole in base a quanto sono informative.
+
+- **TF** (term frequency): quante volte il termine compare nel documento. Se "techno" compare 15 volte, il documento probabilmente parla di techno.
+- **IDF** (inverse document frequency): quanto è raro il termine nell'intera collezione. "Il" compare ovunque, quindi non discrimina nulla. "Roland TR-909" compare in pochi documenti, quindi è molto informativo.
+
+Il peso di un termine è il prodotto dei due. Un documento diventa un vettore lungo quanto il vocabolario (decine di migliaia di dimensioni), quasi tutto zeri, con valori solo nelle posizioni dei termini presenti. Si chiama **vettore sparso**.
+
+Questo è già uno spazio vettoriale, e infatti la similarità si calcola già con il coseno. La differenza col mondo moderno è cosa rappresentano le dimensioni: qui ogni dimensione è **una parola specifica**, non un concetto astratto.
+
+### 3.2 BM25 (anni Novanta, Robertson e Sparck Jones)
+
+BM25 è l'evoluzione raffinata di TF-IDF, e ancora oggi è lo standard di fatto nel keyword search. Introduce due correzioni importanti: la saturazione della frequenza (la ventesima occorrenza di "techno" aggiunge molto meno della seconda) e la normalizzazione sulla lunghezza del documento (un documento lungo ha più occorrenze per caso, non per rilevanza).
+
+BM25 è quello che alimenta Elasticsearch e Lucene. È veloce, interpretabile, non richiede GPU e non richiede un modello. **Non è obsoleto.** Su query con termini precisi, codici prodotto, nomi propri, sigle, BM25 spesso batte i vettori densi.
+
+Il suo limite resta lo stesso: se la parola non c'è, non trova niente.
+
+### 3.3 LSA e il primo tentativo semantico (1988)
+
+Nel 1988 Deerwester, Dumais e colleghi propongono la **Latent Semantic Analysis**. L'idea è già quella moderna: prendi la matrice enorme documenti per termini, applichi una decomposizione ai valori singolari (SVD) e la comprimi a poche centinaia di dimensioni.
+
+Il risultato è che le dimensioni non corrispondono più a parole singole, ma a **combinazioni latenti** che catturano co-occorrenze. Documenti che parlano di macchine e automobili finiscono vicini anche senza condividere token.
+
+LSA è concettualmente il nonno degli embedding. Il problema era pratico: la SVD su matrici grandi è computazionalmente proibitiva, il modello non si aggiorna in modo incrementale, e la qualità semantica resta modesta. Serviva un'idea diversa per generare i vettori.
+
+Quell'idea arriva venticinque anni dopo.
+
+<p class="part">Parte II · La rappresentazione</p>
+
+## 4. Breve storia dello spazio vettoriale
+
+### 4.1 Il vector space model (Salton, anni Settanta)
+
+Gerard Salton, a Cornell, formalizza l'idea che documenti e query possano vivere nello stesso spazio geometrico e che la rilevanza sia una distanza. È un'intuizione enorme, di cui tutto il resto è conseguenza. Il sistema si chiamava SMART, e il coseno come misura di similarità viene da lì.
+
+### 4.2 word2vec (Mikolov, Google, 2013)
+
+Questo è il momento in cui tutto cambia.
+
+Tomas Mikolov e il suo team pubblicano word2vec. L'idea di partenza è vecchia (l'ipotesi distribuzionale di Firth, 1957: *"conoscerai una parola dalla compagnia che frequenta"*), ma l'implementazione è nuova ed efficientissima.
+
+Il meccanismo, semplificato: addestri una rete neurale minuscola a un compito stupido, cioè predire le parole vicine data una parola (skip-gram) o viceversa (CBOW). Il compito in sé non ti interessa. Quello che ti interessa sono i **pesi interni** che la rete impara: quelli diventano il vettore della parola.
+
+Il risultato che sconvolse tutti fu l'aritmetica vettoriale:
+
+```text
+vec("re") - vec("uomo") + vec("donna") ≈ vec("regina")
+vec("Parigi") - vec("Francia") + vec("Italia") ≈ vec("Roma")
+```
+
+Nessuno aveva insegnato alla rete cosa fosse un genere grammaticale o una capitale. Erano **strutture emerse** dalla statistica del linguaggio. Questo è il momento in cui la comunità capisce che lo spazio vettoriale non è una comodità matematica: contiene struttura semantica reale.
+
+(Va detto per onestà: negli anni successivi diversi lavori hanno mostrato che l'esempio re-regina è più fragile e più selezionato di come venne presentato. Ma il principio generale ha retto.)
+
+### 4.3 GloVe (Stanford, 2014) e fastText (Facebook, 2016)
+
+GloVe arriva allo stesso risultato per una via diversa, fattorizzando esplicitamente una matrice di co-occorrenze globali invece di scorrere finestre locali. fastText aggiunge i sotto-token (n-grammi di caratteri), risolvendo il problema delle parole mai viste: anche se "iperfrigorifero" non era nel training, i suoi pezzi sì.
+
+### 4.4 Il limite di tutti questi: una parola, un vettore
+
+Tutti i modelli fino al 2017 hanno lo stesso difetto strutturale: ogni parola ha **un solo vettore fisso**, indipendentemente dal contesto.
+
+"Bank" nella frase "sat on the river bank" e "deposited money in the bank" ha lo stesso identico vettore. Il modello è costretto a fare una media tra i significati, che non è nessuno dei due.
+
+### 4.5 Transformer e BERT (2017-2018)
+
+Il paper *Attention Is All You Need* (Vaswani et al., Google, 2017) introduce l'architettura Transformer, e il meccanismo di **self-attention** risolve esattamente quel problema: ogni token viene rappresentato guardando tutti gli altri token della frase, con pesi appresi.
+
+BERT (Devlin et al., 2018) applica l'idea in modo bidirezionale e produce **embedding contestuali**: "bank" ha vettori diversi nelle due frasi, perché il vettore viene calcolato in funzione del contesto.
+
+C'era però un problema pratico ironico: BERT era eccellente per capire una frase, ma pessimo se prendevi ingenuamente i suoi output per confrontare due frasi. Confrontare 10.000 frasi a coppie richiedeva 50 milioni di passaggi nel modello.
+
+### 4.6 Sentence-BERT (2019) e la nascita degli embedding come prodotto
+
+Reimers e Gurevych risolvono il problema con SBERT: una architettura siamese addestrata specificamente perché il vettore prodotto sia **direttamente confrontabile col coseno**. Da qui nasce la libreria `sentence-transformers`, che è tuttora il punto di ingresso standard.
+
+Questo è il momento in cui l'embedding smette di essere un dettaglio interno di un modello e diventa **un artefatto da salvare in un database**. Ed è il momento in cui i vector database iniziano ad avere senso commerciale.
+
+### 4.7 CLIP (OpenAI, 2021) e lo spazio condiviso
+
+CLIP è il pezzo che riguarda direttamente disctale.
+
+L'idea: addestrare simultaneamente due encoder, uno per immagini e uno per testo, su 400 milioni di coppie immagine-didascalia raccolte dal web. L'obiettivo di training (contrastive learning) è semplice e potente: **il vettore di un'immagine deve essere vicino al vettore della sua didascalia e lontano da tutte le altre**.
+
+La conseguenza è profonda: immagini e testo finiscono nello **stesso spazio vettoriale**. Puoi cercare immagini scrivendo testo, senza aver mai taggato niente. La query "copertina anni Ottanta nera con geometria al centro" diventa un vettore, e le copertine più vicine a quel vettore sono la risposta.
+
+Questa è la tecnologia che rende possibile un archivio di copertine interrogabile a parole. Non c'è tagging manuale, non c'è tassonomia.
+
+### 4.8 Cronologia sintetica
+
+| Anno | Evento | Perché conta |
+|---|---|---|
+| 1957 | Ipotesi distribuzionale (Firth) | Base teorica di tutto |
+| 1970 | Modello relazionale (Codd) | Il paradigma da superare |
+| 1975 | Vector space model (Salton) | Rilevanza come distanza |
+| 1988 | LSA | Primo spazio semantico compresso |
+| 1994 | BM25 | Standard keyword, ancora vivo |
+| 2013 | word2vec | Gli embedding diventano utili |
+| 2014 | GloVe | Via alternativa, stessa idea |
+| 2016 | HNSW (Malkov) | L'indice che rende tutto pratico |
+| 2017 | Transformer | Attention, il cambio di architettura |
+| 2018 | BERT | Embedding contestuali |
+| 2019 | Sentence-BERT | Embedding confrontabili |
+| 2020 | Nasce Qdrant | Vector DB dedicato in Rust |
+| 2021 | CLIP | Spazio condiviso testo-immagine |
+| 2022-2023 | ChatGPT e RAG | Esplosione della domanda |
+| 2024-2026 | Consolidamento | Quantizzazione, ibrido, multimodale |
+
+Nota una cosa importante di questa tabella: **HNSW è del 2016, prima dell'esplosione**. La struttura dati esisteva già e aspettava un problema abbastanza grosso da giustificarla.
+
+## 5. Cos'è un embedding, tecnicamente
+
+Smontiamolo senza metafore.
+
+### 5.1 La definizione minima
 
 Un embedding è **un array di numeri in virgola mobile di lunghezza fissa, prodotto in modo deterministico da un modello a partire da un input**.
 
@@ -28,170 +237,737 @@ Un embedding è **un array di numeri in virgola mobile di lunghezza fissa, prodo
 [0.0234, -0.1891, 0.4432, ..., 0.0021]   // 768 numeri
 ```
 
-Tre proprietà da tenere fisse:
+Tre proprietà da tenere fisse in testa:
 
-1. **Lunghezza fissa.** Un modello a 768 dimensioni produce sempre 768 numeri, per una parola come per dieci pagine. È ciò che rende i vettori confrontabili.
-2. **Determinismo.** Stesso input, stesso modello, stessi pesi: stesso vettore. Un embedding non è un ID casuale — è una posizione, e la posizione ha significato.
-3. **Semantica per costruzione.** Il modello è addestrato perché input simili producano vettori vicini. La vicinanza geometrica *è* la somiglianza semantica, nei limiti di ciò che il modello ha appreso.
+1. **Lunghezza fissa.** Un modello a 768 dimensioni produce sempre 768 numeri, che tu gli dia una parola o dieci pagine. Questo è ciò che rende i vettori confrontabili tra loro.
+2. **Deterministico.** Stesso input, stesso modello, stessi pesi: stesso vettore. Non c'è casualità (a meno di variazioni numeriche minime per hardware o precisione).
+3. **Denso.** Quasi tutti i valori sono diversi da zero, a differenza dei vettori sparsi di TF-IDF. Le informazioni sono distribuite su tutte le dimensioni.
+
+### 5.2 Cosa significano le dimensioni
+
+Domanda naturale: la dimensione 47 rappresenta "tristezza"?
+
+Quasi mai. Le dimensioni sono **latenti**: emergono dall'ottimizzazione e non hanno nomi. Il significato è distribuito, non localizzato. Alcune direzioni nello spazio corrispondono a concetti interpretabili (esistono ricerche di interpretabilità che le trovano), ma non coincidono con gli assi.
+
+L'analogia corretta non è "una colonna per attributo". È più simile a una firma spettrale: nessuna singola frequenza ti dice cos'è il suono, ma il profilo complessivo sì.
+
+### 5.3 Le metriche di distanza
+
+Tre misure dominano.
+
+**Coseno.** Misura l'angolo tra due vettori, ignorando la lunghezza.
+
+```text
+cos(A,B) = (A · B) / (||A|| × ||B||)
+```
+
+Risultato tra -1 e 1 (in pratica spesso tra 0 e 1). È la scelta di default per il testo, perché la direzione del vettore porta il significato, mentre la magnitudine tende a correlare con cose irrilevanti come la lunghezza del documento.
+
+**Dot product.** Il prodotto scalare puro, senza normalizzare. Più veloce da calcolare. Se i vettori sono già normalizzati a lunghezza 1, dot product e coseno danno esattamente lo stesso ordinamento. Molti modelli producono già vettori normalizzati, e in quel caso si usa dot per risparmiare calcoli.
+
+**Euclidea (L2).** La distanza in linea retta. Utile quando la magnitudine porta informazione, tipico in alcuni contesti di computer vision o dati numerici.
 
 <div class="box key">
-  <span class="label">Chi decide cosa</span>
-  <p>L'embedding lo decide il <strong>modello</strong>, non il database. Il database indicizza e cerca vettori che riceve già pronti. Ne seguono due vincoli operativi: vettori di modelli diversi non sono confrontabili tra loro, e cambiare modello di embedding significa re-embeddare l'intera collezione.</p>
+  <span class="label">Regola pratica</span>
+  <p>Usa la metrica che il modello dichiara nella sua documentazione. Non è una scelta estetica. Un modello addestrato col coseno interrogato con L2 dà risultati degradati in modo silenzioso, che è il tipo peggiore di bug.</p>
 </div>
 
-## 3. Da dove vengono: la linea storica
+### 5.4 Un esempio numerico giocattolo
 
-La tabella comprime settant'anni in dieci righe; le quattro in grassetto sono quelle da ricordare.
+Immagina uno spazio a due sole dimensioni, dove per finta la prima è "energia" e la seconda è "elettronico".
 
-| Anno | Evento | Perché conta |
+```text
+techno       [0.9, 0.95]
+house        [0.7, 0.90]
+ambient      [0.1, 0.85]
+punk rock    [0.95, 0.10]
+folk         [0.2, 0.05]
+```
+
+Coseno tra techno e house: molto alto, direzioni quasi identiche.
+Coseno tra techno e punk: medio, condividono l'energia ma non l'elettronica.
+Coseno tra ambient e folk: basso, quasi ortogonali.
+
+Ora immagina la stessa cosa con 768 assi invece di 2, dove nessuno ha un nome, e dove le posizioni sono state apprese da miliardi di esempi invece che inventate. Questo è un embedding vero.
+
+### 5.5 La dimensionalità e il compromesso
+
+| Dimensioni | Modelli tipici | Trade-off |
 |---|---|---|
-| 1957 | Ipotesi distribuzionale (Firth) | «Conosci una parola dalla compagnia che frequenta»: la base teorica di tutto. |
-| 1975 | Vector space model (Salton) | Prima formulazione della rilevanza come distanza. |
-| 1994 | BM25 | Lo standard keyword, tuttora vivo nella ricerca ibrida. |
-| **2013** | **word2vec** | Gli embedding diventano utili: la semantica emerge dall'aritmetica dei vettori. |
-| **2016** | **HNSW (Malkov)** | L'indice che rende la ricerca praticabile su milioni di punti. Notare: precede l'esplosione della domanda. |
-| 2018 | BERT | Embedding contestuali: la stessa parola ha vettori diversi in frasi diverse. |
-| **2019** | **Sentence-BERT** | Embedding di frasi direttamente confrontabili: l'artefatto da salvare in un database nasce qui. |
-| **2021** | **CLIP** | Testo e immagini nello stesso spazio: si cerca un'immagine scrivendo una frase, senza tagging. |
-| 2022–23 | ChatGPT e RAG | L'esplosione della domanda commerciale. |
-| 2024–26 | Consolidamento | Quantizzazione, ricerca ibrida, multimodale, memoria degli agenti. |
+| 384 | MiniLM, BGE-small | Veloce, leggero, qualità buona |
+| 768 | BERT-base, BGE-base, CLIP ViT-B | Standard di riferimento |
+| 1024 | BGE-large, modelli grandi | Qualità superiore, più costo |
+| 1536 | OpenAI text-embedding-3-small | Molto usato via API |
+| 3072 | OpenAI text-embedding-3-large | Costoso in memoria |
 
-## 4. Misurare la vicinanza
+Il costo non è teorico. Un milione di vettori a 1536 dimensioni in float32 occupa circa 6 GB di RAM solo per i vettori grezzi, prima dell'indice. A 384 dimensioni sono 1,5 GB. Su dieci milioni di punti la differenza decide l'architettura del sistema.
 
-Tre metriche coprono la quasi totalità dei casi:
+Da qui l'interesse per i **Matryoshka embeddings** (2022), modelli addestrati in modo che tu possa troncare il vettore ai primi N valori perdendo pochissima qualità. Un vettore 1536 troncato a 512 resta utilizzabile. È una delle innovazioni pratiche più utili degli ultimi anni.
 
-- **Similarità del coseno** — l'angolo tra due vettori, indipendente dalla loro lunghezza. Il default per il testo.
-- **Prodotto scalare (dot product)** — coincide con il coseno su vettori normalizzati; più economico da calcolare.
-- **Distanza euclidea** — la distanza «in linea retta»; usata dove la magnitudine porta informazione.
+## 6. Chi genera gli embedding e perché non è il database
 
-La scelta segue il modello: ogni modello di embedding dichiara con quale metrica è stato addestrato, e usarne un'altra degrada i risultati. Non è un parametro di tuning: è un dato di targa.
+Questo è il punto che più spesso viene frainteso, e vale la pena essere categorici.
 
-Il problema computazionale: confrontare la query con *ogni* vettore (ricerca esatta, k-NN) è lineare nel numero di punti — insostenibile oltre qualche centinaio di migliaia. Le strutture classiche (alberi, hash) collassano in alta dimensionalità per la *curse of dimensionality*. Serve un'altra idea.
+### 6.1 Qdrant non genera nulla
 
-## 5. HNSW: l'indice che rende tutto pratico
+Qdrant riceve un array di float e lo salva. Non sa se rappresenta una copertina, una recensione o il rumore bianco. Non ha modelli al suo interno per la generazione (esistono strumenti dell'ecosistema che fanno da ponte, ma il database in sé no).
 
-Hierarchical Navigable Small World è un grafo multilivello. L'intuizione con una similitudine sola: una rete autostradale sopra una rete di strade locali. I livelli alti hanno pochi nodi e collegamenti lunghi — servono ad arrivare rapidamente nella regione giusta dello spazio. I livelli bassi hanno tutti i nodi e collegamenti corti — servono a raffinare fino ai vicini veri.
+La pipeline è sempre a due stadi separati:
 
-Una ricerca parte dal livello più alto, scende avvicinandosi per salti grossolani, e al livello zero esplora il vicinato. Il risultato è **approssimato** (ANN, non k-NN): con probabilità alta ma non certa restituisce i veri vicini, in tempo logaritmico invece che lineare.
+```text
+[dato grezzo] → [MODELLO] → [vettore] → [DATABASE]
+                    ↑
+              qui si decide tutto
+```
 
-| Parametro | Controlla | Trade-off |
+### 6.2 Lo stesso dato produce lo stesso vettore ovunque
+
+Domanda frequente: l'embedding di una copertina è diverso in ogni database del mondo?
+
+No. L'embedding dipende **solo** dal modello. Stessa immagine, stesso CLIP ViT-B/32, stessi pesi: identico vettore, che tu lo salvi su Qdrant, Pinecone, Milvus o in un file CSV.
+
+Quello che cambia tra database è come i vettori vengono **indicizzati, filtrati, distribuiti e interrogati**. Non il loro contenuto.
+
+### 6.3 Non è un ID casuale, è l'opposto
+
+Un UUID è casuale per costruzione: la sua unica proprietà è l'unicità. Due UUID vicini nell'ordinamento non hanno alcuna relazione semantica.
+
+Un embedding è deterministico e informativo: la sua posizione **è** l'informazione. Due vettori vicini sono vicini perché i dati che rappresentano sono simili.
+
+La differenza è la stessa che passa tra una targa e delle coordinate GPS. La targa identifica, non localizza. Le coordinate localizzano, e la vicinanza tra coordinate significa qualcosa nel mondo reale.
+
+### 6.4 Il vincolo che genera più bug in produzione
+
+**Tutti i vettori in una collection devono venire dallo stesso modello, nella stessa versione.**
+
+Se embeddi metà catalogo con CLIP e metà con un modello diverso, i vettori vivono in spazi geometricamente incompatibili. Le distanze calcolate tra loro sono numeri validi ma privi di significato. Il sistema non darà mai errore. Restituirà semplicemente risultati sbagliati che sembrano plausibili.
+
+Corollario operativo: **cambiare modello significa re-embeddare tutto**. Non c'è migrazione parziale possibile. Metti in conto questo costo prima di scegliere il modello, non dopo.
+
+### 6.5 Come generare embedding in un backend Rust
+
+Dato che disctale ha backend Rust, ecco le tre strade reali.
+
+**fastembed-rs.** La più diretta. Esegue modelli ONNX in locale tramite ONNX Runtime, con modelli già impacchettati (BGE, MiniLM, e famiglie multilingua). Nessuna chiamata di rete, latenza bassa, costo zero per inferenza. È la scelta sensata per embedding di testo in produzione.
+
+**candle.** Il framework ML nativo Rust di Hugging Face. Più flessibile, ti permette di caricare modelli arbitrari dall'hub, incluso CLIP per le immagini. Richiede più lavoro ma non ti vincola al catalogo di fastembed.
+
+**API esterna via reqwest.** Chiami OpenAI, Cohere, Voyage o Jina via HTTP. Implementazione banale, qualità spesso ottima, ma introduci una dipendenza di rete, un costo per chiamata e un problema di privacy se i dati sono sensibili.
+
+In un backend del genere, la scelta effettiva si ricostruisce dal codice in quest'ordine:
+
+1. Il `Cargo.toml`: la presenza di `fastembed`, `candle-core`/`candle-transformers`, o solo `reqwest` dice già quasi tutto.
+2. La chiamata a `upsert_points` o `upsert_blocking` verso Qdrant: risalendo da lì si trova chi ha costruito il vettore.
+3. La configurazione della collection: il campo `size` del vettore identifica quasi univocamente la famiglia di modello (384 e 768 e 1024 e 1536 sono firme riconoscibili).
+
+<p class="part">Parte III · Il motore</p>
+
+## 7. La maledizione della dimensionalità
+
+Abbiamo i vettori. Ora il problema pratico: dato un vettore query, come trovi i più vicini tra dieci milioni, in pochi millisecondi?
+
+### 7.1 L'approccio ingenuo
+
+Calcoli la distanza tra la query e ognuno dei dieci milioni di vettori, ordini, prendi i primi k. Si chiama **ricerca esaustiva** o *brute force*, ed è O(n·d) dove d è la dimensionalità.
+
+Dieci milioni di vettori a 768 dimensioni significa circa 7,7 miliardi di moltiplicazioni per singola query. Su CPU sono secondi, non millisecondi. Con cento query al secondo il sistema muore.
+
+Nota però: su dataset piccoli (diciamo sotto i 10.000 vettori) la ricerca esaustiva è **la scelta giusta**. È esatta, semplice, senza parametri da tarare. Non costruire indici complessi per problemi che non li richiedono.
+
+### 7.2 Perché non si usa un B-tree o un k-d tree
+
+Qui torna la frase della Parte I: il B-tree funziona perché esiste un ordine totale.
+
+In uno spazio a 768 dimensioni **non esiste ordine totale**. Non puoi dire che il vettore A viene "prima" del vettore B. Puoi solo dire che A è più vicino a C di quanto lo sia B. È una relazione ternaria, non un ordinamento.
+
+Le strutture spaziali classiche (k-d tree, R-tree, ball tree) partizionano lo spazio con iperpiani e funzionano benissimo... fino a circa 10-20 dimensioni. Oltre, collassano.
+
+Il motivo ha un nome: **curse of dimensionality**, coniato da Richard Bellman negli anni Cinquanta. In alta dimensione succedono cose contro-intuitive:
+
+- Il volume si concentra sulla superficie. Quasi tutti i punti di una ipersfera stanno vicino al bordo, non al centro.
+- Le distanze si concentrano. Il rapporto tra la distanza massima e minima da un punto qualunque tende a 1. In pratica **tutti i punti sembrano ugualmente lontani**, e il concetto stesso di "vicino" perde contrasto.
+- Il partizionamento non aiuta. Un k-d tree in 768 dimensioni deve visitare quasi tutti i rami per garantire correttezza, quindi non è più veloce del brute force. Anzi, è più lento per via dell'overhead.
+
+Questo è il punto tecnico centrale di tutta la storia: **non esiste una struttura dati che dia ricerca esatta ed efficiente per il vicino più prossimo in alta dimensione**.
+
+### 7.3 La resa strategica: accettare l'approssimazione
+
+Se non puoi avere esatto e veloce, rinunci all'esatto.
+
+Nasce l'**ANN**, Approximate Nearest Neighbor. L'accordo è: ti do i vicini quasi sempre giusti, molto in fretta.
+
+La metrica di qualità si chiama **recall@k**: su k risultati restituiti, quanti sarebbero stati nella risposta esatta? Recall 0.95 su k=10 significa che in media 9,5 dei 10 risultati sono corretti.
+
+La domanda di ingegneria diventa: cosa cambia davvero per il prodotto se il decimo risultato di una ricerca semantica non è quello matematicamente ottimo?
+
+Nella stragrande maggioranza dei casi: **nulla**. L'utente non conosce la risposta esatta, e il concetto stesso di "corretto" in una ricerca semantica è già sfumato. Questa è la ragione culturale per cui l'approssimazione, inaccettabile in un sistema bancario, è perfettamente accettabile qui.
+
+## 8. Ricerca approssimata: LSH, IVF, HNSW
+
+Tre famiglie di soluzioni, in ordine storico.
+
+### 8.1 LSH, Locality Sensitive Hashing (1998)
+
+L'idea rovescia il concetto di hash. Un hash normale è progettato perché input simili diano output completamente diversi (effetto valanga). LSH fa l'opposto: progetta funzioni hash **che collidono di proposito** quando gli input sono vicini.
+
+Usi più funzioni hash, ognuna assegna i vettori a bucket, e cerchi solo dentro i bucket dove è finita la query.
+
+Pro: garanzie probabilistiche dimostrabili, semplice, adatto a streaming.
+Contro: per avere recall alto servono moltissime tabelle hash, la memoria esplode, e in pratica la qualità è inferiore ai metodi a grafo.
+
+Oggi LSH è più materiale da corso universitario che scelta di produzione, ma capirlo aiuta.
+
+### 8.2 IVF, Inverted File Index (da FAISS, Facebook, 2017)
+
+L'approccio a clustering, ed è molto intuitivo.
+
+**Costruzione:** applichi k-means su tutti i vettori e ottieni, per esempio, 4096 centroidi. Ogni vettore viene assegnato al centroide più vicino. Hai partizionato lo spazio in 4096 celle (celle di Voronoi).
+
+**Ricerca:** confronti la query con i 4096 centroidi (economico), scegli le `nprobe` celle più promettenti (diciamo 16), e fai ricerca esaustiva solo dentro quelle. Hai ridotto lo spazio di ricerca di due ordini di grandezza.
+
+Pro: costruzione veloce, memoria contenuta, ottimo se combinato con la compressione (vedi oltre).
+Contro: il parametro `nprobe` è un compromesso diretto tra velocità e recall, e i punti vicini al confine tra due celle vengono spesso persi. Inoltre richiede una fase di training del clustering, quindi non è naturalmente incrementale.
+
+IVF è il cuore di FAISS ed è ancora dominante quando la priorità è la memoria.
+
+### 8.3 HNSW: Hierarchical Navigable Small World (Malkov e Yashunin, 2016)
+
+Questo è l'algoritmo di Qdrant, e va capito bene perché è elegante.
+
+**Il primo ingrediente: il grafo navigable small world.**
+
+Costruisci un grafo dove ogni vettore è un nodo, collegato ai suoi vicini. Per cercare, parti da un nodo qualunque e applichi una greedy search: guardi i vicini del nodo corrente, ti sposti su quello più vicino alla query, ripeti finché nessun vicino migliora. È discesa del gradiente su un grafo.
+
+Il problema: con soli collegamenti locali, se parti dalla parte sbagliata dello spazio impieghi un'eternità ad attraversarlo.
+
+La soluzione viene dalla teoria dei **small world network** (Watts e Strogatz, 1998, l'idea dei sei gradi di separazione): aggiungi qualche collegamento **lungo**, casuale, che salta dall'altra parte del grafo. Bastano pochi collegamenti lunghi per ridurre drasticamente il numero di passi necessari.
+
+**Il secondo ingrediente: la gerarchia.**
+
+Qui c'è l'idea che dà la H al nome, ed è presa in prestito dalle **skip list**.
+
+Costruisci più livelli di grafo sovrapposti:
+
+- Il livello più alto contiene pochissimi nodi, con collegamenti lunghissimi. È la mappa autostradale.
+- Ogni livello sotto contiene più nodi con collegamenti più corti.
+- Il livello zero contiene tutti i nodi con i collegamenti più fini. È la mappa stradale cittadina.
+
+La ricerca funziona così: entri dal livello più alto, fai greedy search finché non migliori più, **scendi di un livello partendo da dove sei arrivato**, ripeti. Al livello zero fai la ricerca fine e restituisci i k migliori.
+
+L'analogia è precisa: per andare da Milano a Trani non parti dalle stradine di quartiere. Prendi l'autostrada, esci al casello giusto, poi le strade provinciali, poi le vie. Ogni livello ti porta nella zona giusta a una scala diversa.
+
+**La complessità risultante è O(log n)**, che è ciò che rende praticabile la ricerca su miliardi di vettori.
+
+**I parametri da conoscere:**
+
+| Parametro | Cosa fa | Effetto |
 |---|---|---|
-| `m` | Numero di collegamenti per nodo | Più alto: recall migliore, più memoria e costruzione più lenta. |
-| `ef_construct` | Ampiezza della ricerca in fase di costruzione | Più alto: grafo di qualità migliore, indicizzazione più lenta. |
-| `ef` | Ampiezza della ricerca in fase di query | Più alto: recall migliore, query più lenta. Regolabile per query. |
+| `m` | Numero di collegamenti per nodo | Più alto: recall migliore, più memoria. Tipico 16-64 |
+| `ef_construct` | Ampiezza della ricerca in costruzione | Più alto: indice migliore, costruzione più lenta. Tipico 100-500 |
+| `ef` (search) | Ampiezza della ricerca in query | Più alto: recall migliore, query più lenta. Regolabile a runtime |
+
+L'ultimo è il più utile in pratica: `ef` si cambia per singola query. Puoi avere ricerche veloci per l'autocomplete e ricerche accurate per la pagina risultati, sullo stesso identico indice.
+
+**Limiti di HNSW:** consuma più memoria di IVF (deve tenere il grafo, non solo i vettori), e la cancellazione è scomoda (di solito si marca il nodo come eliminato e si ricompatta periodicamente). Sono i due prezzi che paghi per la qualità.
+
+### 8.4 Confronto sintetico
+
+| | Brute force | LSH | IVF | HNSW |
+|---|---|---|---|---|
+| Esatto | Sì | No | No | No |
+| Complessità query | O(n) | ~O(1) | O(n/celle) | O(log n) |
+| Memoria | Minima | Alta | Bassa | Alta |
+| Costruzione | Nessuna | Veloce | Media (training) | Lenta |
+| Inserimento incrementale | Banale | Buono | Scomodo | Buono |
+| Recall a parità di velocità | 1.0 | Basso | Medio | Alto |
+| Usato da | tutti, per dataset piccoli | ricerca accademica | FAISS, Milvus | Qdrant, Weaviate, Lucene |
+
+## 9. Quantizzazione e compressione
+
+Il problema di memoria è concreto. Riprendiamo i numeri: dieci milioni di vettori a 1536 dimensioni in float32 sono circa 61 GB solo di vettori, più l'overhead del grafo HNSW. Non ci stanno in RAM su macchine ragionevoli.
+
+La quantizzazione riduce la precisione numerica accettando un errore controllato.
+
+### 9.1 Scalar quantization
+
+Converti ogni float32 (4 byte) in un int8 (1 byte), mappando l'intervallo dei valori su 256 livelli. **Riduzione 4x della memoria**, perdita di recall tipicamente sotto l'1%, e in più la ricerca diventa spesso *più veloce* perché passano più dati per ciclo di cache.
+
+È l'opzione con il miglior rapporto beneficio/rischio. Se hai problemi di memoria, questa è la prima leva da tirare.
+
+### 9.2 Product quantization (PQ)
+
+Molto più aggressiva. Spezzi il vettore in m sotto-vettori, applichi k-means su ciascun sotto-spazio ottenendo un piccolo codebook, e sostituisci ogni sotto-vettore con l'indice del centroide più vicino.
+
+Un vettore da 1536 dimensioni può diventare 96 byte invece di 6144. **Riduzione fino a 64x.** Il prezzo è una perdita di recall sensibile, che si recupera con un passaggio di *rescoring*: prendi i primi 100 candidati con i vettori compressi e li riordini usando i vettori originali letti da disco.
+
+PQ viene da FAISS ed è la tecnica classica per dataset enormi.
+
+### 9.3 Binary quantization
+
+L'estremo: ogni dimensione diventa un singolo bit (positivo o negativo rispetto a una soglia), con varianti asimmetriche e a 1.5-2 bit. **Riduzione 32x.** La distanza si calcola con la distanza di Hamming, che su CPU moderne è velocissima grazie alle istruzioni di popcount.
+
+Funziona sorprendentemente bene, ma **solo su modelli ad alta dimensionalità addestrati per resistere alla binarizzazione**. Su un modello a 384 dimensioni distrugge la qualità, su uno a 1536 con rescoring può essere quasi indistinguibile dall'originale. È una delle aree più attive del 2024-2026.
+
+### 9.4 TurboQuant (2026)
+
+Il compromesso intermedio, introdotto da Qdrant nel 2026 come formato di storage primario: quantizzazione a 4 bit, tra la prudenza della scalar e l'aggressività della binary. Segnale di dove sta andando lo strato: la quantizzazione non è più un'ottimizzazione opzionale ma il default di archiviazione.
+
+### 9.5 Regola pratica
+
+```text
+Meno di 100k vettori    → nessuna quantizzazione, non serve
+100k - 5M               → scalar quantization
+5M - 100M               → scalar o binary + rescoring
+Oltre 100M              → binary o PQ + rescoring su disco
+```
+
+<p class="part">Parte IV · Qdrant</p>
+
+## 10. Architettura interna
+
+Qdrant nasce nel 2020, scritto interamente in Rust, con licenza Apache 2.0. La scelta progettuale che lo distingue è di essere un database vettoriale **nativo**, non un'estensione bolt-on su un motore preesistente.
+
+### 10.1 Il modello dei dati
+
+Quattro concetti, tutto qui.
+
+**Collection.** L'equivalente di una tabella o di una collection MongoDB. Ha una configurazione fissa: dimensionalità dei vettori e metrica di distanza. Non puoi mescolare vettori a 768 e 1536 dimensioni nella stessa collection.
+
+**Point.** L'unità di dato. Contiene:
+
+- `id`: intero senza segno oppure UUID
+- `vector`: l'array di float (o più array, se usi vettori nominati)
+- `payload`: un documento JSON arbitrario
+
+**Payload.** Qui sta una delle cose che rendono Qdrant comodo: il payload è JSON arbitrario, quindi puoi salvare titolo, artista, anno, etichetta, URL della copertina, direttamente accanto al vettore. Se vieni da MongoDB ti troverai a casa. È indicizzabile con indici dedicati per campo.
+
+**Named vectors.** Un singolo point può avere più vettori con nomi diversi. Per disctale questo è rilevante: un disco può avere `cover_clip` (embedding visivo della copertina), `descrizione_testo` (embedding della recensione) e `audio_features` (embedding del suono), tutti nello stesso point, ognuno interrogabile separatamente. È un pattern potentissimo e sottoutilizzato.
+
+### 10.2 Segmenti, storage e persistenza
+
+Internamente una collection è divisa in **segmenti**. Ogni segmento ha il proprio indice HNSW ed è ottimizzabile in modo indipendente. Questo permette a Qdrant di continuare a servire query mentre ricostruisce l'indice di un segmento.
+
+Esistono segmenti *appendable* (ricevono le scritture nuove, ricerca esaustiva perché piccoli) e segmenti *indexed* (grandi, immutabili, con HNSW costruito). Un processo di ottimizzazione in background li fonde e li reindicizza.
+
+Le scritture passano da un **WAL** (write-ahead log): la scrittura viene registrata sul log prima di essere applicata, quindi un crash non perde dati. È lo stesso principio di PostgreSQL o MongoDB.
+
+Lo storage può essere in memoria o su disco con memory mapping. La configurazione tipica in produzione tiene su disco i vettori grezzi e in RAM la versione quantizzata più il grafo — dal 2026 anche con storage *inline* dei vettori quantizzati dentro i nodi HNSW, per ridurre le letture da disco.
+
+### 10.3 Il filtered search problem e la soluzione di Qdrant
+
+Questo merita attenzione perché è un problema reale che molti sistemi risolvono male.
+
+Vuoi: "i 10 dischi con copertina più simile a questa, **ma solo tra quelli usciti dopo il 2010**".
+
+Ci sono due approcci ingenui, entrambi difettosi:
+
+**Pre-filtering.** Prima filtri per anno, poi fai brute force sul sottoinsieme. Corretto ma lento se il sottoinsieme è grande: hai buttato via l'indice.
+
+**Post-filtering.** Prima cerchi i 10 più simili con HNSW, poi scarti quelli fuori filtro. Velocissimo, ma se dei 10 risultati solo 2 passano il filtro, restituisci 2 risultati invece di 10. È il classico bug "la ricerca mi torna meno risultati del previsto".
+
+**La soluzione di Qdrant: filterable HNSW.** L'indice del payload viene consultato **durante** la navigazione del grafo, non prima e non dopo. I nodi che non soddisfano il filtro vengono semplicemente saltati durante la traversata.
+
+C'è un dettaglio sottile: se il filtro è molto selettivo (passa lo 0,1% dei punti), il grafo si frammenta e la navigazione fallisce, perché i nodi validi non sono più connessi tra loro. Qdrant gestisce il caso con una stima di cardinalità: se il filtro è troppo selettivo, ricade automaticamente sulla ricerca esaustiva sul sottoinsieme, che in quel caso è veloce comunque perché il sottoinsieme è piccolo. Dal 2025 include anche **ACORN**, una strategia di traversata che mantiene il recall anche con filtri molto selettivi.
+
+Questa combinazione, filtri strutturati e similarità nella stessa chiamata con strategia adattiva, è la ragione tecnica principale per cui si sceglie Qdrant invece di una libreria come FAISS.
+
+### 10.4 Distribuzione
+
+Qdrant supporta sharding (i dati divisi su più nodi, con sharding automatico o custom via chiave) e replication (copie per resilienza e throughput di lettura). Il coordinamento del cluster usa Raft per il consenso sui metadati. Dal 2026 la multitenancy è *tiered*: shard dedicati per i tenant grandi, shard condiviso di fallback per i piccoli, con promozione automatica.
 
 <div class="box key">
-  <span class="label">Il concetto di recall</span>
-  <p>Il recall è la frazione dei veri k vicini che la ricerca approssimata effettivamente restituisce. È la metrica di qualità di un indice ANN, e ogni scelta di tuning è uno scambio tra recall, latenza e memoria. Un sistema che non misura il proprio recall non sa cosa sta scambiando.</p>
+  <span class="label">Fotografia: Qdrant ad agosto 2026</span>
+  <p>Versione corrente 1.19 (4 agosto 2026). Le release dell'ultimo anno hanno portato: tiered multitenancy, inline storage HNSW, ACORN, TurboQuant, IDF per query sulla ricerca sparse, un profiler per le operazioni lente. Sul cloud: indicizzazione accelerata su GPU, cluster Multi-AZ, audit logging. In arrivo la direzione edge: Qdrant Edge, motore in-process e offline per ricerca vettoriale su dispositivo. La fase delle feature di ricerca è matura; la competizione si è spostata su costo per punto memorizzato, isolamento multi-tenant e integrazione nei carichi agentici.</p>
 </div>
 
-<p class="part">Parte II · Qdrant</p>
+## 11. Come si interroga davvero
 
-## 6. Qdrant: il modello dei dati
+Vediamo il flusso reale, con esempi.
 
-Qdrant (nato nel 2020, scritto in Rust) organizza i dati in tre concetti:
+### 11.1 Creazione della collection
 
-<dl>
-<dt>Collection</dt>
-<dd>L'insieme dei punti con la stessa configurazione vettoriale: dimensionalità, metrica, parametri dell'indice. L'analogo funzionale di una tabella.</dd>
-<dt>Point</dt>
-<dd>L'unità di memorizzazione: un ID, uno o più vettori, e un payload.</dd>
-<dt>Payload</dt>
-<dd>I metadati JSON associati al punto — categorie, date, riferimenti, qualunque struttura. Sono indicizzabili e filtrabili.</dd>
-</dl>
+```rust
+use qdrant_client::qdrant::{CreateCollectionBuilder, Distance, VectorParamsBuilder};
 
-Due capacità distinguono un database vettoriale dedicato da una libreria di indicizzazione:
+client
+    .create_collection(
+        CreateCollectionBuilder::new("dischi")
+            .vectors_config(
+                VectorParamsBuilder::new(512, Distance::Cosine)
+            ),
+    )
+    .await?;
+```
 
-**Filtered search integrata.** «I più simili a X *tra quelli che soddisfano il filtro Y*» non è risolvibile bene filtrando prima (l'indice non serve più) né dopo (i risultati filtrati via lasciano buchi). Qdrant integra i filtri di payload *dentro* la traversata di HNSW, ed è uno dei suoi argomenti tecnici centrali. Dal 2025 include anche ACORN, una strategia di traversata che mantiene il recall con filtri molto selettivi.
+Due decisioni bloccanti in tre righe: dimensionalità (512, tipica di CLIP ViT-B/32) e metrica (coseno). Cambiarle dopo richiede di ricreare la collection.
 
-**Named vectors.** Più vettori distinti sullo stesso punto — ad esempio uno per il testo e uno per l'immagine dello stesso elemento, o un dense e uno sparse — interrogabili separatamente o in combinazione. È il mattone della multimodalità e della ricerca ibrida.
+### 11.2 Inserimento
 
-<div class="ex"><span class="label">Esempio quotidiano</span>
-<p>Un catalogo prodotti: ogni point ha un vettore CLIP dell'immagine, un vettore testuale della descrizione, e un payload con prezzo e disponibilità. La query «giacca minimale sui toni caldi, sotto i 100 €, disponibile» combina somiglianza sull'immagine, somiglianza sul testo e due filtri di payload in un'unica richiesta.</p></div>
+```rust
+use qdrant_client::qdrant::{PointStruct, UpsertPointsBuilder};
+use serde_json::json;
 
-## 7. Ricerca ibrida e reranking
+let vettore: Vec<f32> = genera_embedding_copertina(&immagine)?;
 
-La ricerca densa capisce i sinonimi ma può mancare la corrispondenza letterale: un codice di errore, un nome proprio, un identificativo. La keyword search (BM25, o i suoi equivalenti sparse come SPLADE) fa l'opposto. La pratica di produzione del 2026 è la **ricerca ibrida**: entrambe in parallelo, fusione dei risultati (tipicamente Reciprocal Rank Fusion), e spesso un **reranker** finale — un cross-encoder che rivaluta le prime decine di candidati leggendo query e documento insieme, più preciso ma troppo costoso per l'intera collezione.
+let point = PointStruct::new(
+    42,
+    vettore,
+    json!({
+        "titolo": "Selected Ambient Works 85-92",
+        "artista": "Aphex Twin",
+        "anno": 1992,
+        "etichetta": "R&S Records",
+        "cover_url": "https://..."
+    })
+    .try_into()
+    .unwrap(),
+);
 
-La pipeline canonica: *retrieval largo ed economico → fusione → reranking stretto e costoso*. Ogni stadio esiste perché il precedente è troppo impreciso e il successivo troppo caro per fare tutto da solo. Sul fronte keyword, il full-text di Qdrant si è irrobustito nel 2025–26: phrase matching, stop-words, tokenizzatore multilingue e stemming, riducendo i casi in cui serve un motore keyword separato a fianco.
+client
+    .upsert_points(UpsertPointsBuilder::new("dischi", vec![point]))
+    .await?;
+```
 
-## 8. Quantizzazione dei vettori
+Nota che `genera_embedding_copertina` è **codice applicativo**, fuori da Qdrant. È lì che vive la scelta del modello.
 
-Lo stesso principio della quantizzazione dei modelli, applicato ai vettori memorizzati: rappresentarli con meno bit per ridurre memoria e tempo di lettura. Le forme in uso:
+### 11.3 Ricerca con filtro
 
-- **Scalar quantization** — da float32 a int8: 4× di risparmio, perdita minima. Il default ragionevole.
-- **Binary quantization** — un bit per dimensione (con varianti asimmetriche e a 1.5–2 bit): fino a 32× di risparmio, adatta a vettori ad alta dimensionalità, tipicamente con rescoring sui vettori pieni.
-- **TurboQuant a 4 bit** — introdotta da Qdrant nel 2026 come storage primario: il compromesso intermedio tra le due.
+```rust
+use qdrant_client::qdrant::{Condition, Filter, SearchPointsBuilder};
 
-Il pattern operativo standard: cercare sui vettori quantizzati (veloce, tutto in RAM), rifinire il punteggio dei migliori candidati sui vettori originali su disco. Insieme alla quantizzazione, la gestione della collocazione — quali strutture stanno in RAM, quali su disco, cosa è «pinned» — è diventata parte esplicita della configurazione, incluso lo storage *inline* dei vettori quantizzati dentro i nodi HNSW per ridurre le letture da disco.
+let query_vec: Vec<f32> = genera_embedding_testo("copertina nera geometrica minimale")?;
 
-## 9. Stato dell'arte — agosto 2026
+let risultati = client
+    .search_points(
+        SearchPointsBuilder::new("dischi", query_vec, 10)
+            .filter(Filter::must([
+                Condition::range("anno", Range { gte: Some(1980.0), lte: Some(1989.0), ..Default::default() })
+            ]))
+            .with_payload(true)
+            .params(SearchParamsBuilder::default().hnsw_ef(128)),
+    )
+    .await?;
+```
 
-Fotografia verificata alla data di revisione:
+Qui succedono tre cose insieme che meritano di essere notate:
 
-- **Versione corrente:** Qdrant 1.19 (4 agosto 2026). Le release dell'ultimo anno hanno portato, tra l'altro: tiered multitenancy (shard dedicati per i tenant grandi, shard condiviso di fallback per i piccoli, con promozione automatica), inline storage HNSW, ACORN, TurboQuant, IDF per query sulla ricerca sparse, e un profiler per le operazioni lente.
-- **Cloud:** indicizzazione accelerata su GPU, cluster Multi-AZ con replica su tre zone, audit logging strutturato — il pacchetto «enterprise-ready» annunciato ad aprile 2026.
-- **Edge:** Qdrant Edge, motore in-process e offline per ricerca vettoriale su dispositivo — la direzione robotica ed edge AI.
-- **Direzione dichiarata per il 2026:** efficienza (quantizzazione, separazione lettura/scrittura), retrieval «agent-native» (relevance feedback), operabilità enterprise (multitenancy scalabile, repliche read-only).
+1. Il testo della query viene trasformato in vettore **con lo stesso modello CLIP** usato per le immagini. È possibile solo perché CLIP condivide lo spazio tra le due modalità.
+2. Il filtro sull'anno viene applicato durante la traversata del grafo.
+3. `hnsw_ef` è regolato per questa singola query.
 
-La lettura d'insieme: la fase delle feature di ricerca è matura; la competizione si è spostata su costo per punto memorizzato, isolamento multi-tenant e integrazione nei carichi agentici.
+Il risultato è una lista ordinata per **score**, non un insieme. Ogni elemento ha un punteggio di similarità. Questa è la differenza operativa più visibile rispetto a MongoDB: non ottieni "i documenti che matchano", ottieni "i documenti ordinati per quanto assomigliano", e sta a te decidere dove tagliare.
 
-<p class="part">Parte III · Il contesto</p>
+### 11.4 Sulla soglia di score
 
-## 10. Dedicato o estensione: il mercato
+Errore frequentissimo: fissare una soglia assoluta tipo `score > 0.8` e considerarla universale.
 
-Ogni database generalista ha ormai aggiunto i vettori: pgvector su Postgres, Atlas Vector Search su MongoDB, e gli equivalenti su Elasticsearch, Redis, SQLite. Se ogni database sa fare ricerca vettoriale «abbastanza bene», lo spazio per il prodotto dedicato si restringe a chi ha requisiti reali di scala.
+Gli score non sono comparabili tra modelli diversi, tra metriche diverse, né tra domini diversi. Un coseno di 0,75 può essere un match eccellente con un modello e mediocre con un altro. La soglia va calibrata empiricamente sui propri dati, guardando i risultati reali.
 
-La contro-argomentazione — che è la tesi dei dedicati come Qdrant, Pinecone e Weaviate — è che «abbastanza bene» non basta oltre una certa soglia: filtering integrato nell'indice, quantizzazione, gestione dei segmenti e tuning del recall sono problemi profondi che un'estensione bolt-on affronta male.
+### 11.5 Ricerca ibrida
 
-<div class="box key">
-  <span class="label">Verdetto</span>
-  <p>Hanno ragione entrambi, su segmenti diversi. Sotto il milione di vettori, con filtri semplici e un solo tipo di dato, pgvector dentro il database già in uso è la scelta razionale: un componente in meno da operare. La scelta del dedicato si giustifica con volumi seri, filtri complessi sul payload, multimodalità o multitenancy — e conviene sapere <em>quale</em> di questi assi la sta giustificando.</p>
-</div>
+Dal 2024 in avanti Qdrant supporta nativamente i **vettori sparsi** accanto a quelli densi, e quindi la ricerca ibrida.
 
-## 11. La memoria degli agenti
+Il senso: i vettori densi capiscono il significato ma perdono i termini esatti. Se cerchi "Roland TR-909" il vettore denso ti porta nella zona giusta (drum machine, techno) ma potrebbe non distinguere la 909 dalla 808. BM25 o SPLADE su vettori sparsi invece matchano il token esatto.
 
-Il caso d'uso emergente più rilevante dello strato. Gli agenti hanno bisogno di ricordare interazioni passate, e la memoria episodica è naturalmente un problema di recupero per similarità: «cosa è successo di simile a questo?». Ma il carico è diverso dal RAG classico, e sta spingendo requisiti nuovi:
+Fai entrambe le ricerche e fondi i risultati, tipicamente con **Reciprocal Rank Fusion**: ogni documento riceve un punteggio basato sulla sua posizione in ciascuna lista, e le posizioni si sommano. Non richiede di normalizzare score incompatibili.
 
-- scritture ad altissima frequenza (ogni turno dell'agente può produrre ricordi);
-- decadimento temporale della rilevanza (un ricordo di ieri pesa più di uno di un anno fa);
-- isolamento per utente su milioni di tenant piccoli — il problema che la tiered multitenancy affronta direttamente.
+La ricerca ibrida è oggi considerata lo stato dell'arte per la maggior parte dei casi d'uso di ricerca reale, e la letteratura è concorde: batte quasi sempre sia il denso puro sia il keyword puro. Sul fronte keyword, il full-text di Qdrant si è irrobustito nel 2025-26 — phrase matching, stop-words, tokenizzatore multilingue e stemming — riducendo i casi in cui serve un motore keyword separato a fianco.
 
-È l'area in cui i database vettoriali stanno evolvendo più rapidamente, ed è il contesto in cui vanno lette quasi tutte le feature elencate nella sezione 9.
+## 12. Perché Rust
 
-## 12. Errori tipici
+Qdrant è scritto in Rust, e non è marketing.
+
+**Nessun garbage collector.** Un vector database fa allocazioni continue di array grandi durante la ricerca. Con un GC (Java, Go) le pause di raccolta si manifestano come picchi di latenza sulla coda della distribuzione. Il p99 è quello che l'utente percepisce come "a volte è lento". Rust gestisce la memoria con ownership a tempo di compilazione: nessuna pausa, latenza prevedibile.
+
+**Controllo sul layout in memoria.** Puoi decidere esattamente come i vettori stanno in memoria, allineati per essere caricati efficientemente nella cache CPU. In un motore dove il collo di bottiglia è la banda di memoria, questo conta più dell'algoritmo.
+
+**SIMD.** Le operazioni sui vettori (dot product, distanze) sono perfette per le istruzioni vettoriali della CPU (AVX2, AVX-512, NEON su ARM). Rust espone questo controllo mantenendo un livello di astrazione ragionevole.
+
+**Concorrenza senza data race.** Il sistema di tipi impedisce a compile time le classi di bug più insidiose della concorrenza. Per un motore che serve query in parallelo mentre riorganizza segmenti in background, è una garanzia che vale molto.
+
+Il fatto che il backend di disctale sia anch'esso in Rust non è un vantaggio tecnico diretto (il protocollo è gRPC o REST, il linguaggio del client è indifferente), ma è un vantaggio pratico: il client ufficiale `qdrant-client` è di prima classe, e si resta in un unico ecosistema di build e deploy.
+
+<p class="part">Parte V · Pratica</p>
+
+## 13. Caso di studio: disctale
+
+Applichiamo tutto all'archivio di dischi del caso di studio: copertine, testi e metadati.
+
+### 13.1 Cosa deve saper fare
+
+Le domande che un sistema vettoriale rende possibili e che con MongoDB non si potrebbero nemmeno formulare:
+
+- "trovami dischi con copertine simili a questa" (immagine come query)
+- "copertina anni Ottanta nera con geometria al centro" (testo che cerca immagini)
+- "dischi che suonano come questo" (audio come query, con un modello audio)
+- "cosa mi consigli, visto che ho ascoltato questi cinque album" (media dei vettori come query)
+- "recensioni che parlano di malinconia urbana" (testo che cerca testo)
+
+Nota che tutte queste sono la **stessa operazione** a livello di database: trova i vicini di un vettore. Cambia solo chi produce il vettore.
+
+### 13.2 Architettura consigliata
+
+```text
+INGESTION
+  copertina.jpg ──→ CLIP image encoder ──→ [512 float]
+  recensione.txt ─→ BGE text encoder ────→ [768 float]
+  metadati ───────────────────────────────→ payload JSON
+                          ↓
+              Qdrant: un point, named vectors
+                   { cover: [...], testo: [...] }
+                   payload: { titolo, artista, anno, label, url }
+
+QUERY (immagine)
+  immagine utente ─→ CLIP image encoder ─→ search(vector_name="cover")
+
+QUERY (testo su copertine)
+  "nera geometrica" ─→ CLIP TEXT encoder ─→ search(vector_name="cover")
+                          ↑
+                    stesso spazio, encoder diverso
+
+QUERY (testo su recensioni)
+  "malinconia urbana" ─→ BGE encoder ────→ search(vector_name="testo")
+```
+
+Il punto elegante: `cover` accetta query sia da immagini sia da testo, perché CLIP condivide lo spazio. `testo` accetta solo query testuali BGE. Sono due spazi separati, entrambi nello stesso point.
+
+### 13.3 Scelte concrete da fare
+
+**Quale CLIP.** ViT-B/32 (512 dim) è il compromesso classico, veloce e leggero. ViT-L/14 (768 dim) è più accurato ma quattro volte più costoso in inferenza. Per copertine di dischi, dove le differenze sono spesso grossolane (colore dominante, composizione, tipografia), ViT-B/32 è probabilmente sufficiente. Vale la pena testare su cinquanta copertine reali prima di decidere.
+
+**Come chunkare i testi.** Le recensioni lunghe non vanno embeddate intere: un vettore di lunghezza fissa che deve rappresentare tremila parole diventa una media insipida. Spezza in chunk di 200-500 token con sovrapposizione di circa il 15%, e crea un point per chunk con un riferimento nel payload al disco padre.
+
+**Backfill.** Se il catalogo vive già in MongoDB, l'embedding di tutto il catalogo è un job batch che può durare ore. Prevedi un campo di stato (`embedded_at`, `embedding_model_version`) per poterlo riprendere e per sapere cosa va rifatto quando cambi modello.
+
+**MongoDB resta.** Questo è importante: il vector database **non sostituisce** il database primario. MongoDB o Postgres restano la fonte di verità per i dati transazionali, gli utenti, gli ordini, le modifiche. Qdrant è un indice di ricerca specializzato, e come tutti gli indici è ricostruibile a partire dalla fonte di verità. Va progettato come derivabile, non come autoritativo.
+
+## 14. RAG, il caso d'uso che ha fatto esplodere il settore
+
+Una guida sui vector database che non spiega RAG è incompleta, perché è il motivo per cui questa tecnologia è passata da nicchia a mainstream nel giro di dodici mesi.
+
+### 14.1 Il problema
+
+Un LLM sa solo quello che c'era nei suoi dati di addestramento. Non conosce i tuoi documenti interni, il tuo catalogo, la tua documentazione. E ha una finestra di contesto finita, quindi non puoi incollargli dentro diecimila pagine.
+
+### 14.2 La soluzione: Retrieval Augmented Generation
+
+Il termine viene da un paper di Lewis e colleghi (Facebook AI, 2020), ma è esploso con ChatGPT nel 2023.
+
+```text
+1. OFFLINE
+   documenti → chunking → embedding → vector database
+
+2. A RUNTIME
+   domanda utente → embedding → ricerca top-k nel vector DB
+                                        ↓
+                            i k chunk più rilevanti
+                                        ↓
+        prompt = [istruzioni] + [chunk recuperati] + [domanda]
+                                        ↓
+                                      LLM
+                                        ↓
+                         risposta fondata sui tuoi dati
+```
+
+Il vector database è il pezzo "R" di RAG. È letteralmente la memoria a lungo termine del sistema.
+
+### 14.3 Perché conta capirlo anche se non fai RAG
+
+Perché tutte le pratiche di qualità del RAG (chunking sensato, ricerca ibrida, reranking, filtri sui metadati) sono le stesse pratiche che servono a una ricerca semantica normale. La comunità RAG ha prodotto in tre anni una quantità enorme di conoscenza operativa che è direttamente riutilizzabile.
+
+### 14.4 Il reranking, il passaggio che quasi tutti saltano
+
+Pattern che alza la qualità più di qualunque altra ottimizzazione:
+
+1. Recuperi **50** candidati con la ricerca vettoriale (veloce, approssimata, buona a scremare)
+2. Passi i 50 a un **cross-encoder**, un modello che guarda query e documento **insieme** e produce un punteggio di rilevanza molto più accurato
+3. Tieni i migliori 5
+
+Il cross-encoder è troppo lento per confrontarsi con dieci milioni di documenti (dovrebbe fare un passaggio per ciascuno), ma su 50 è istantaneo. È una divisione del lavoro tra un filtro grezzo e veloce e un giudice preciso e lento.
+
+Se la ricerca semantica dà risultati "quasi giusti ma ordinati male", il reranking è quasi sempre la risposta.
+
+## 15. Gli errori che fanno tutti
+
+Lista di cose che si scoprono in produzione, ordinate per frequenza.
 
 <ol class="mistakes">
-<li><strong>Cambiare modello di embedding senza re-embeddare tutto</strong> — vettori di modelli diversi coesistono nello stesso spazio solo geometricamente, non semanticamente.</li>
-<li><strong>Usare una metrica diversa da quella di training del modello</strong> — degrada i risultati in modo silenzioso.</li>
-<li><strong>Ignorare il recall</strong> — tarare <code>ef</code> e <code>m</code> a occhio, senza un set di query di riferimento con risultati attesi.</li>
-<li><strong>Chunking come ripensamento</strong> — la qualità del retrieval si decide più in come si spezzano i documenti che in come si tara l'indice.</li>
-<li><strong>Solo denso dove serve l'ibrido</strong> — codici, nomi propri e identificativi si perdono senza una gamba keyword/sparse.</li>
-<li><strong>Scegliere il dedicato per default</strong> — senza aver verificato che volumi, filtri o multitenancy lo giustifichino rispetto all'estensione del database già in casa.</li>
+<li><strong>Modelli diversi nella stessa collection.</strong> Il bug silenzioso per eccellenza. Nessun errore, solo risultati insensati. Scrivi la versione del modello nel payload di ogni point, sempre.</li>
+<li><strong>Metrica sbagliata.</strong> Modello addestrato con coseno, collection configurata con euclidea. Funziona, restituisce risultati, sono peggiori del dovuto e nessuno se ne accorge per mesi.</li>
+<li><strong>Chunk troppo grandi.</strong> Embeddare un documento di quaranta pagine in un unico vettore produce una media di tutto e una rappresentazione di niente. Se la ricerca sembra "generica", questo è il primo sospettato.</li>
+<li><strong>Chunk troppo piccoli.</strong> L'errore opposto: chunk di una frase perdono il contesto e recuperi frammenti privi di senso. La finestra 200-500 token esiste per una ragione empirica.</li>
+<li><strong>Ignorare i filtri sui metadati.</strong> Molti team fanno solo ricerca vettoriale pura quando un filtro banale (lingua, data, tenant) migliorerebbe i risultati e ridurrebbe lo spazio di ricerca. Il filtro è gratis, usalo.</li>
+<li><strong>Post-filtering fatto a mano.</strong> Recuperare k risultati e filtrarli nel codice applicativo dopo. Ti ritrovi con meno risultati del previsto in modo imprevedibile. Usa i filtri del database.</li>
+<li><strong>Aspettarsi ricerca esatta.</strong> ANN è approssimato per definizione. Se serve garanzia di esattezza (per un audit, per una compliance) devi disabilitare l'indice e fare brute force, accettando la latenza.</li>
+<li><strong>Non misurare il recall.</strong> Costruisci un set di cinquanta query con le risposte attese conosciute. È l'unico modo per sapere se <code>ef=64</code> basta o serve <code>ef=256</code>. Senza misura, la taratura dei parametri è superstizione.</li>
+<li><strong>Trattare il vector DB come fonte di verità.</strong> Deve essere ricostruibile dal database primario. Se perdi Qdrant devi poter rifare tutto da MongoDB in un job batch.</li>
+<li><strong>Dimenticare il costo di re-embedding.</strong> Cambiare modello significa rigenerare ogni vettore. Su milioni di documenti con API a pagamento è un costo reale in euro, non solo in tempo. Valutalo prima.</li>
 </ol>
 
-## 13. Glossario
+<p class="part">Parte VI · Panorama</p>
+
+## 16. Le alternative
+
+Il mercato si è affollato dal 2021 in poi. Vale la pena avere una mappa, non per cambiare scelta ma per sapere cosa si è scelto.
+
+### 16.1 Database vettoriali dedicati
+
+**Qdrant.** Rust, Apache 2.0, HNSW, filtri integrati sofisticati, self-host senza attriti più cloud gestito. Punto di forza: il filtering e il rapporto prestazioni/complessità operativa. È la scelta ragionevole di default per chi self-hosta.
+
+**Pinecone.** Managed puro, chiuso, niente self-host. Punto di forza: non gestisci nulla. Punto debole: lock-in totale e costi che crescono in fretta.
+
+**Weaviate.** Go, open source, modulare, integra la vettorizzazione al suo interno (può chiamare i modelli lui) e ha uno schema più strutturato con GraphQL. Più opinionato di Qdrant.
+
+**Milvus.** C++/Go, il più "enterprise", architettura disaggregata pensata per scala massiva (miliardi di vettori). Potente e complesso da gestire: overkill sotto una certa dimensione.
+
+**Chroma.** Python-first, pensato per prototipare RAG. Ottimo per iniziare, non pensato per carichi seri.
+
+**LanceDB.** Interessante e recente: formato colonnare su file (stile Parquet), embedded come SQLite. Nessun server da gestire. Ottimo per applicazioni locali e analitiche.
+
+### 16.2 Estensioni di database esistenti
+
+**pgvector (PostgreSQL).** È la vera alternativa strategica. Aggiunge un tipo `vector` e indici HNSW e IVFFlat a Postgres. Il vantaggio è enorme: un solo database, transazioni ACID, join veri tra dati vettoriali e relazionali, competenze già in casa.
+
+Il limite: sotto pressione, con decine di milioni di vettori e filtri complessi, un motore dedicato è più veloce e più prevedibile. Ma sotto il milione di vettori, **pgvector è quasi sempre la scelta più sensata**, e vale la pena dirlo con chiarezza anche in una guida su Qdrant.
+
+**MongoDB Atlas Vector Search.** Se sei già su Atlas, aggiunge ricerca vettoriale ai tuoi documenti. Comodo, ma legato al cloud gestito di MongoDB.
+
+**Elasticsearch / OpenSearch.** Hanno aggiunto HNSW accanto a BM25. Se hai già un cluster Elastic e serve ricerca ibrida, sono candidati seri.
+
+**Redis.** Ha un modulo di ricerca vettoriale. Latenza bassissima, ma tutto in RAM, quindi costoso su volumi grandi.
+
+**sqlite-vec.** Estensione per SQLite. Per applicazioni desktop, mobile, edge, o per test locali è deliziosa nella sua semplicità.
+
+### 16.3 Librerie, non database
+
+**FAISS (Meta).** Non è un database: è una libreria C++/Python di algoritmi ANN. Nessuna persistenza gestita, nessun filtro, nessun server, nessuna concorrenza. È il motore che sta dentro molti prodotti. Se stai facendo ricerca o hai un caso batch, è perfetta. Se serve un servizio, tocca costruire tutto il resto attorno.
+
+**ScaNN (Google), Annoy (Spotify), hnswlib.** Stessa categoria. Annoy in particolare è nato per le raccomandazioni musicali di Spotify, il che ha una certa ironia rispetto al caso d'uso di disctale.
+
+### 16.4 Tabella di orientamento
+
+| Se... | Scegli |
+|---|---|
+| Meno di 1M vettori, già su Postgres | pgvector |
+| Serve controllo, self-host, filtri complessi | Qdrant |
+| Non vuoi gestire infrastruttura, budget disponibile | Pinecone |
+| Miliardi di vettori, team dedicato | Milvus |
+| Prototipo RAG in Python | Chroma |
+| App desktop o embedded | LanceDB, sqlite-vec |
+| Ricerca ibrida su cluster Elastic esistente | Elasticsearch |
+| Ricerca accademica o batch offline | FAISS |
+
+## 17. Quando NON serve un vector database
+
+Sezione importante, perché l'entusiasmo per questa tecnologia ha prodotto molta architettura inutile.
+
+**Non serve se i dati sono strutturati e le query sono esatte.** Cercare per prezzo, data, stato, categoria è lavoro da SQL. Un vettore qui non aggiunge nulla e toglie precisione.
+
+**Non serve sotto i diecimila vettori.** A quel volume la ricerca esaustiva in memoria è istantanea. Un array di float e un ciclo che calcola il coseno risolvono il problema in venti righe. Aggiungere un servizio da gestire è complessità gratuita.
+
+**Non serve se BM25 basta.** Se gli utenti cercano codici prodotto, nomi propri, sigle, riferimenti esatti, il keyword search è **migliore**, non peggiore. Non è un ripiego.
+
+**Non serve un servizio separato se sei già su Postgres e i volumi sono moderati.** pgvector evita un intero pezzo di infrastruttura, un backup in più, un monitoraggio in più.
+
+**Non serve se non hai un modo di misurare se funziona.** Senza un set di valutazione, la ricerca semantica è una scatola nera che restituisce sempre qualcosa. "Sempre qualcosa" non è la stessa cosa di "la cosa giusta".
+
+## 18. Dove sta andando la tecnologia
+
+Stato al 2026 e traiettorie ragionevoli.
+
+### 18.1 L'ibrido diventa il default
+
+Il denso puro sta perdendo terreno come impostazione predefinita. La combinazione di vettori densi, vettori sparsi appresi (SPLADE) e reranking è ormai lo standard nei sistemi seri. Tutti i motori principali hanno aggiunto il supporto nativo. Aspettati che diventi la configurazione di partenza, non un'ottimizzazione avanzata.
+
+### 18.2 Multimodalità normalizzata
+
+CLIP ha aperto la strada, ma i modelli successivi (SigLIP e famiglie simili) hanno alzato la qualità e ridotto il costo. La direzione è verso spazi condivisi che includano testo, immagine, audio e video insieme. Per un archivio musicale come disctale questo è direttamente rilevante: poter cercare un disco descrivendo a parole come suona, non solo come appare.
+
+### 18.3 Compressione aggressiva
+
+Binary quantization e Matryoshka embeddings insieme cambiano l'economia del settore. Un miliardo di vettori che prima richiedeva un cluster costoso può ora stare su una manciata di macchine. Questo abbassa la barriera all'ingresso più di qualunque innovazione algoritmica.
+
+### 18.4 Late interaction (ColBERT e successori)
+
+Invece di un vettore per documento, **un vettore per token**, con un punteggio calcolato come somma delle migliori corrispondenze. Molto più accurato, molto più costoso in memoria. Le versioni compresse (ColBERTv2, PLAID) lo stanno rendendo praticabile. È probabilmente la direzione della qualità nei prossimi anni.
+
+### 18.5 La domanda scomoda: feature o prodotto?
+
+C'è un dibattito legittimo nel settore, e vale la pena conoscerlo: la ricerca vettoriale è un'industria a sé o è una funzionalità che ogni database finirà per avere?
+
+Gli indizi puntano verso la seconda ipotesi. Postgres, MongoDB, Elasticsearch, Redis, SQLite: tutti hanno aggiunto vettori. Se ogni database sa fare ricerca vettoriale "abbastanza bene", lo spazio per un prodotto dedicato si restringe a chi ha davvero requisiti estremi.
+
+La contro-argomentazione, che è la tesi di Qdrant, è che "abbastanza bene" non basta oltre una certa scala: il filtering integrato, la quantizzazione, la gestione dei segmenti e il tuning del recall sono problemi profondi che un'estensione bolt-on affronta male.
+
+Probabilmente hanno ragione entrambi, su segmenti diversi. La conseguenza pratica per disctale: la scelta di Qdrant è giustificata se i volumi sono seri, i filtri complessi e la multimodalità reale. Se il catalogo restasse piccolo, pgvector sarebbe stato altrettanto valido. Vale la pena esserne consapevoli, non per cambiare idea, ma per sapere su quale asse si sta investendo complessità.
+
+### 18.6 Memoria degli agenti
+
+Il caso d'uso emergente più interessante: gli agenti AI hanno bisogno di ricordare interazioni passate, e la memoria episodica è naturalmente un problema di recupero per similarità. Questo sta spingendo requisiti nuovi: scritture ad altissima frequenza, decadimento temporale della rilevanza, filtri per utente su milioni di tenant. È l'area dove i vector database stanno evolvendo più rapidamente in questo momento — ed è il contesto in cui va letta la direzione «agent-native» dichiarata da Qdrant per il 2026.
+
+<p class="part">Appendici</p>
+
+## A. Glossario
 
 <dl class="gloss">
 <dt>ACORN</dt><dd>Strategia di traversata HNSW che preserva il recall in presenza di filtri molto selettivi.</dd>
-<dt>ANN</dt><dd>Approximate Nearest Neighbor: ricerca dei vicini approssimata ma veloce; la famiglia a cui HNSW appartiene.</dd>
-<dt>BM25</dt><dd>Funzione di ranking keyword, standard dagli anni Novanta; la gamba «esatta» della ricerca ibrida.</dd>
+<dt>ANN</dt><dd>Approximate Nearest Neighbor: famiglia di algoritmi che trovano i vicini più prossimi in modo approssimato ma veloce.</dd>
+<dt>BM25</dt><dd>Funzione di ranking per keyword search, standard dagli anni Novanta.</dd>
 <dt>Chunking</dt><dd>Suddivisione di un documento lungo in pezzi da embeddare separatamente.</dd>
-<dt>Collection</dt><dd>In Qdrant, l'insieme dei point con la stessa configurazione vettoriale.</dd>
-<dt>Cross-encoder</dt><dd>Modello che valuta query e documento insieme; usato per il reranking.</dd>
-<dt>Curse of dimensionality</dt><dd>Fenomeni che rendono inefficaci le strutture dati classiche in alta dimensionalità.</dd>
+<dt>Collection</dt><dd>In Qdrant, l'insieme di point con la stessa configurazione vettoriale.</dd>
+<dt>Coseno</dt><dd>Metrica di similarità basata sull'angolo tra vettori.</dd>
+<dt>Cross-encoder</dt><dd>Modello che valuta query e documento insieme, usato per il reranking.</dd>
+<dt>Curse of dimensionality</dt><dd>Insieme di fenomeni contro-intuitivi in spazi ad alta dimensionalità che rendono inefficaci le strutture dati classiche.</dd>
+<dt>Dense vector</dt><dd>Vettore in cui quasi tutti i valori sono diversi da zero, prodotto da una rete neurale.</dd>
 <dt>Embedding</dt><dd>Rappresentazione numerica a dimensione fissa di un dato, prodotta da un modello.</dd>
-<dt>HNSW</dt><dd>Hierarchical Navigable Small World: indice a grafo multilivello per ricerca ANN.</dd>
-<dt>Named vectors</dt><dd>Più vettori distinti associati allo stesso point.</dd>
-<dt>Payload</dt><dd>I metadati JSON associati a un point.</dd>
-<dt>Recall</dt><dd>Frazione dei veri k vicini restituita dalla ricerca approssimata.</dd>
-<dt>Reciprocal Rank Fusion</dt><dd>Metodo di fusione dei ranking di più ricerche parallele.</dd>
-<dt>RAG</dt><dd>Retrieval-Augmented Generation: recupero di contesto rilevante da fornire a un modello generativo.</dd>
-<dt>Sparse vector</dt><dd>Vettore quasi tutto a zero, tipicamente legato al vocabolario; la controparte moderna della keyword search.</dd>
-<dt>Tiered multitenancy</dt><dd>In Qdrant, combinazione di shard dedicati per tenant grandi e shard condiviso per i piccoli, con promozione.</dd>
+<dt>ef / ef_construct</dt><dd>Parametri di HNSW che controllano l'ampiezza della ricerca in query e in costruzione.</dd>
+<dt>HNSW</dt><dd>Hierarchical Navigable Small World, l'algoritmo di indicizzazione a grafo multilivello usato da Qdrant.</dd>
+<dt>IVF</dt><dd>Inverted File Index, indicizzazione basata su clustering.</dd>
+<dt>Latent space</dt><dd>Lo spazio vettoriale appreso da un modello, le cui dimensioni non hanno nomi.</dd>
+<dt>Matryoshka embedding</dt><dd>Embedding troncabile a dimensionalità inferiore con perdita minima di qualità.</dd>
+<dt>Named vectors</dt><dd>In Qdrant, più vettori distinti associati allo stesso point.</dd>
+<dt>Payload</dt><dd>I metadati JSON associati a un point in Qdrant.</dd>
+<dt>Point</dt><dd>L'unità di dato in Qdrant: id, vettore o vettori, payload.</dd>
+<dt>Product Quantization</dt><dd>Compressione che suddivide il vettore e sostituisce ogni parte con un indice di codebook.</dd>
+<dt>RAG</dt><dd>Retrieval Augmented Generation, pattern che recupera documenti rilevanti da fornire a un LLM.</dd>
+<dt>Recall@k</dt><dd>Percentuale di risultati corretti tra i k restituiti, rispetto alla ricerca esatta.</dd>
+<dt>Reranking</dt><dd>Riordinamento dei candidati recuperati usando un modello più accurato e più lento.</dd>
+<dt>RRF</dt><dd>Reciprocal Rank Fusion, tecnica per fondere liste di risultati provenienti da ricerche diverse.</dd>
+<dt>Sparse vector</dt><dd>Vettore ad alta dimensionalità con quasi tutti zeri, tipico di TF-IDF e BM25.</dd>
+<dt>Tiered multitenancy</dt><dd>In Qdrant, shard dedicati per i tenant grandi e shard condiviso per i piccoli, con promozione automatica.</dd>
+<dt>TurboQuant</dt><dd>Quantizzazione a 4 bit introdotta da Qdrant nel 2026 come storage primario.</dd>
+<dt>Upsert</dt><dd>Operazione di inserimento o aggiornamento di un point.</dd>
 </dl>
 
-## 14. Autoverifica
+## B. Percorso di studio consigliato
+
+Ordinato per progressione, non per importanza.
+
+**Settimana 1, le fondamenta concettuali.** La documentazione ufficiale di Qdrant, sezione Concepts. È scritta bene ed è didattica, non solo di riferimento. Copre collection, point, payload, filtering e ottimizzazione.
+
+**Settimana 1-2, il corso breve.** "Vector Databases: from Embeddings to Applications" su DeepLearning.ai. Un'ora scarsa, molto pratico, dà il modello mentale completo.
+
+**Settimana 2, l'algoritmo.** Il paper originale di HNSW: Malkov e Yashunin, *Efficient and robust approximate nearest neighbor search using Hierarchical Navigable Small World graphs* (2016). Le prime cinque pagine bastano per capire l'idea, e sono leggibili anche senza background accademico pesante.
+
+**Settimana 3, gli embedding.** Il paper di CLIP (Radford et al., OpenAI, 2021) se il caso è visivo. In alternativa Sentence-BERT (Reimers e Gurevych, 2019) se interessa più il testo. Entrambi sono insolitamente accessibili per essere paper.
+
+**Settimana 3-4, la pratica.** Il tutorial ufficiale di `qdrant-client` per Rust, costruendo un indice reale su un sottoinsieme del catalogo — duecento copertine bastano per capire tutto.
+
+**In parallelo, per calibrare le aspettative.** Il benchmark ANN-Benchmarks (progetto open source di Erik Bernhardsson) mostra i grafici recall/velocità di tutti gli algoritmi. Guardare quelle curve chiarisce meglio di mille spiegazioni cosa significa il compromesso tra precisione e latenza.
+
+**Per andare più a fondo.** Il libro *Introduction to Information Retrieval* di Manning, Raghavan e Schütze (Cambridge, disponibile gratuitamente online). È del 2008, quindi precede tutta la rivoluzione neurale, ma i capitoli su vector space model, indicizzazione e valutazione sono ancora il riferimento migliore per capire perché le cose sono fatte come sono fatte.
+
+## C. Il riassunto in cinque righe
+
+Un database tradizionale risponde a "cosa corrisponde a questa condizione". Un vector database risponde a "cosa assomiglia a questo".
+
+Il vettore lo produce un modello, non il database. Il database lo indicizza con un grafo multilivello (HNSW) che permette di trovare i vicini in tempo logaritmico anziché lineare, accettando di sbagliare ogni tanto.
+
+Qdrant fa questo in Rust, con la particolarità di saper applicare filtri strutturati durante la navigazione del grafo anziché prima o dopo.
+
+Tutto il resto è taratura.
+
+## D. Autoverifica
 
 <ol class="selfcheck">
 <li>Perché un embedding non è analogo a un ID casuale, e quale proprietà del modello lo garantisce?</li>

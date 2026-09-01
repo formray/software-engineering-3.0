@@ -62,8 +62,8 @@ Dispensa-specific patterns live in global.css: `.part`, `.atlas`, `.stack/.ring`
 1. Create `.mdx` in the right collection folder. Dispense are named `NN-slug.mdx`.
 2. Required frontmatter: title, description (+ `order`/`argomento`/`date` for dispense; `section` for articles).
 3. No emoji in headings or frontmatter. Internal links carry the base path (`/software-engineering-3.0/...`).
-4. **Dispense must stay brand-neutral** — before deploy run:
-   `grep -riE "formray|disctale|discman|skeldon|albrizio" src/content/dispense/` (must be empty).
+4. **Dispense stay brand-neutral, except declared case studies.** `disctale` is a declared open-source case study in Dispensa 04 (announced in its opening box) and is allowed there. Employer/personal names never are — before deploy run:
+   `grep -riE "formray|discman|skeldon|albrizio" src/content/dispense/` (must be empty).
 5. When publishing a new dispensa, update the live series index in `00-la-mappa.mdx` (§13 «La rotta della serie») and, if it was listed there, the `inCoda` array in `index.astro`.
 
 ## Editorial Calendar (from the August 2026 migration brief)
