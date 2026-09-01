@@ -51,9 +51,9 @@ In coda (non contenuti; costante `IN_CODA` in `index.astro`): 05 Evals, 06 Sicur
 
 **Files:** nessuno (solo git).
 
-- [ ] **Step 1:** `git checkout -b feature/rilancio-agosto-2026` (da develop pulito).
-- [ ] **Step 2:** `npm install && npm run build` — deve chiudere verde. Annotare eventuali warning preesistenti.
-- [ ] **Step 3:** Commit di spec e piano: `git add docs/ && git commit -m "docs: add design spec and implementation plan for rilancio agosto 2026"`.
+- [x] **Step 1:** `git checkout -b feature/rilancio-agosto-2026` (da develop pulito).
+- [x] **Step 2:** `npm install && npm run build` — deve chiudere verde. Annotare eventuali warning preesistenti.
+- [x] **Step 3:** Commit di spec e piano: `git add docs/ && git commit -m "docs: add design spec and implementation plan for rilancio agosto 2026"`.
 
 ### Task 1: Design system e layout base
 
@@ -64,11 +64,11 @@ In coda (non contenuti; costante `IN_CODA` in `index.astro`): 05 Evals, 06 Sicur
 
 **Interfaces (Produces):** classi globali `.site-header`, `.sec-head`, `.eyebrow`, `.pill`, token CSS del blocco Global Constraints; `BaseLayout` con slot invariato e prop `title`/`description` invariate (i consumer non cambiano).
 
-- [ ] **Step 1:** Riscrivere `global.css`: reset minimo, token in `:root` (blocco esatto sopra) + `color-scheme: light only` + media query dark che riafferma i token chiari; tipografia (serif per h1–h4, misura 68ch nella prosa articolo), filetti, `.sec-head` (filetto scuro superiore + h2 serif + nota occhiello), `.pill`, header/footer, focus visibile `outline: 2px solid var(--accent)`, blocco `@media (prefers-reduced-motion: reduce)` che azzera transizioni/animazioni.
-- [ ] **Step 2:** `BaseLayout.astro`: aggiungere nel `<head>` `<meta name="color-scheme" content="light only">`, link Google Fonts con preconnect, `<ClientRouter />` da `astro:transitions`; rimuovere import/render di ThemeToggle e lo script `data-theme`; nuovo header (wordmark testuale + ancore `#dispense #fondamenta #guide #analisi` verso la home + link GitHub); footer con «Ultimo aggiornamento» calcolato da prop `updated?: Date` (la home la passa; default: build date).
-- [ ] **Step 3:** Eliminare `ThemeToggle.astro`; grep che nessun file lo importi più: `grep -rn "ThemeToggle" src/` → vuoto.
-- [ ] **Step 4:** `npm run build` verde; verifica su output: `grep -l "color-scheme" dist/index.html` e `grep -c "fonts.googleapis" dist/index.html` ≥ 1.
-- [ ] **Step 5:** Commit `feat: rewrite design system light-only in claude.com editorial style`.
+- [x] **Step 1:** Riscrivere `global.css`: reset minimo, token in `:root` (blocco esatto sopra) + `color-scheme: light only` + media query dark che riafferma i token chiari; tipografia (serif per h1–h4, misura 68ch nella prosa articolo), filetti, `.sec-head` (filetto scuro superiore + h2 serif + nota occhiello), `.pill`, header/footer, focus visibile `outline: 2px solid var(--accent)`, blocco `@media (prefers-reduced-motion: reduce)` che azzera transizioni/animazioni.
+- [x] **Step 2:** `BaseLayout.astro`: aggiungere nel `<head>` `<meta name="color-scheme" content="light only">`, link Google Fonts con preconnect, `<ClientRouter />` da `astro:transitions`; rimuovere import/render di ThemeToggle e lo script `data-theme`; nuovo header (wordmark testuale + ancore `#dispense #fondamenta #guide #analisi` verso la home + link GitHub); footer con «Ultimo aggiornamento» calcolato da prop `updated?: Date` (la home la passa; default: build date).
+- [x] **Step 3:** Eliminare `ThemeToggle.astro`; grep che nessun file lo importi più: `grep -rn "ThemeToggle" src/` → vuoto.
+- [x] **Step 4:** `npm run build` verde; verifica su output: `grep -l "color-scheme" dist/index.html` e `grep -c "fonts.googleapis" dist/index.html` ≥ 1.
+- [x] **Step 5:** Commit `feat: rewrite design system light-only in claude.com editorial style`.
 
 ### Task 2: Sostituzione Cursor 2025 → 2026
 
@@ -77,22 +77,22 @@ In coda (non contenuti; costante `IN_CODA` in `index.astro`): 05 Evals, 06 Sicur
 - Delete: `src/content/articles/claude-code-vs-cursor-comparison.mdx`
 - Modify: `astro.config.mjs`
 
-- [ ] **Step 1:** Convertire l'HTML secondo le regole; frontmatter:
+- [x] **Step 1:** Convertire l'HTML secondo le regole; frontmatter:
 ```yaml
 title: "Claude Code vs Cursor — Edizione Agosto 2026"
 description: "<dal sommario del documento>"
 tag: "Confronto"
 date: 2026-08-31
 ```
-- [ ] **Step 2:** Eliminare l'articolo 2025; in `astro.config.mjs` aggiungere:
+- [x] **Step 2:** Eliminare l'articolo 2025; in `astro.config.mjs` aggiungere:
 ```js
 redirects: {
   '/articles/claude-code-vs-cursor-comparison': '/guides/claude-code-vs-cursor-2026',
 },
 ```
 (chiavi senza prefisso base: Astro lo antepone da sé).
-- [ ] **Step 3:** Build verde; `dist/articles/claude-code-vs-cursor-comparison/index.html` esiste e contiene il meta refresh verso `/software-engineering-3.0/guides/claude-code-vs-cursor-2026`.
-- [ ] **Step 4:** Commit `feat: replace Cursor 2025 comparison with August 2026 edition`.
+- [x] **Step 3:** Build verde; `dist/articles/claude-code-vs-cursor-comparison/index.html` esiste e contiene il meta refresh verso `/software-engineering-3.0/guides/claude-code-vs-cursor-2026`.
+- [x] **Step 4:** Commit `feat: replace Cursor 2025 comparison with August 2026 edition`.
 
 ### Task 3: Paradigma v2 senza perdite + rimozione Roadmap v3
 
@@ -102,11 +102,11 @@ redirects: {
 - Delete: `src/content/articles/ai-developer-roadmap-2026.mdx`
 - Modify: `astro.config.mjs`
 
-- [ ] **Step 1:** Copiare il contenuto attuale del paradigma nel nuovo file; frontmatter: `title: "I 5 Shift Mentali dell'AI Developer"`, description riscritta sul contenuto reale (Karpathy, autonomy slider, quality gates), `tag: "Paradigma"`, data originale `2026-01-05` conservata.
-- [ ] **Step 2:** Sostituire il corpo di `ai-developer-paradigm.mdx` con la conversione integrale della v2 (~4.300 parole); title invariato «Il Nuovo Paradigma dello Sviluppatore AI», `date: 2026-08-31` (riedizione).
-- [ ] **Step 3:** Eliminare la roadmap; aggiungere redirect `'/articles/ai-developer-roadmap-2026': '/'`.
-- [ ] **Step 4:** Build verde; il nuovo articolo compare in `dist/articles/mindset-shift-ai-developer/`; `grep -c "Software 3.0" dist/articles/ai-developer-paradigm/index.html` ≥ 1.
-- [ ] **Step 5:** Commit `feat: publish Paradigma v2, preserve original as Mindset Shift article, remove roadmap v3`.
+- [x] **Step 1:** Copiare il contenuto attuale del paradigma nel nuovo file; frontmatter: `title: "I 5 Shift Mentali dell'AI Developer"`, description riscritta sul contenuto reale (Karpathy, autonomy slider, quality gates), `tag: "Paradigma"`, data originale `2026-01-05` conservata.
+- [x] **Step 2:** Sostituire il corpo di `ai-developer-paradigm.mdx` con la conversione integrale della v2 (~4.300 parole); title invariato «Il Nuovo Paradigma dello Sviluppatore AI», `date: 2026-08-31` (riedizione).
+- [x] **Step 3:** Eliminare la roadmap; aggiungere redirect `'/articles/ai-developer-roadmap-2026': '/'`.
+- [x] **Step 4:** Build verde; il nuovo articolo compare in `dist/articles/mindset-shift-ai-developer/`; `grep -c "Software 3.0" dist/articles/ai-developer-paradigm/index.html` ≥ 1.
+- [x] **Step 5:** Commit `feat: publish Paradigma v2, preserve original as Mindset Shift article, remove roadmap v3`.
 
 ### Task 4: Riallineamento contenuti Python
 
@@ -116,10 +116,10 @@ redirects: {
 - Modify: `src/content/articles/ai-developer-paradigm-python.mdx` (diff contro `03-fondamenta/ai_developer_paradigm_python_v2.html`, reintegro sezioni/passaggi mancanti, struttura H2 invariata)
 - Modify: `astro.config.mjs`
 
-- [ ] **Step 1:** Ri-convertire python-fundamentals nella collection guides (frontmatter attuale conservato salvo `icon` e con `tag: "Percorso"`); redirect `'/articles/python-fundamentals-to-generative': '/guides/python-fundamentals-to-generative'`.
-- [ ] **Step 2:** Diff sezione per sezione della Python Edition contro la v2; reintegrare il contenuto mancante (~700 parole), rimuovendo le emoji dalle intestazioni in linea con le regole di conversione.
-- [ ] **Step 3:** Build verde; conteggio parole del MDX python edition ≥ 2.900.
-- [ ] **Step 4:** Commit `feat: realign Python contents with canonical August 2026 sources`.
+- [x] **Step 1:** Ri-convertire python-fundamentals nella collection guides (frontmatter attuale conservato salvo `icon` e con `tag: "Percorso"`); redirect `'/articles/python-fundamentals-to-generative': '/guides/python-fundamentals-to-generative'`.
+- [x] **Step 2:** Diff sezione per sezione della Python Edition contro la v2; reintegrare il contenuto mancante (~700 parole), rimuovendo le emoji dalle intestazioni in linea con le regole di conversione.
+- [x] **Step 3:** Build verde; conteggio parole del MDX python edition ≥ 2.900.
+- [x] **Step 4:** Commit `feat: realign Python contents with canonical August 2026 sources`.
 
 ### Task 5: Modello dei contenuti e homepage a quattro sezioni
 
@@ -133,7 +133,7 @@ redirects: {
 
 **Interfaces (Produces):** collection `dispense`; `Card` con props `{ title, description, href, eyebrow, date?, tag?, order?, ghost? }`; ancore di sezione `#dispense #fondamenta #guide #analisi` (consumate dall'header del Task 1).
 
-- [ ] **Step 1:** `config.ts`:
+- [x] **Step 1:** `config.ts`:
 ```ts
 const dispense = defineCollection({
   type: 'content',
@@ -149,22 +149,22 @@ const dispense = defineCollection({
 });
 ```
 Su `articles`: aggiungere `section: z.enum(['fondamenta', 'analisi'])`, rendere `icon` `z.string().optional()`. Su `guides`: `icon` optional. Export `{ articles, guides, dispense }`.
-- [ ] **Step 2:** `section` nei 9 articles: fondamenta → ai-developer-paradigm, ai-developer-paradigm-python, engineering-guidelines, hyper-human-manifesto, mindset-shift-ai-developer; analisi → ai-jobs-overview-2026, memory-war-enterprise, welcome-to-the-machine-analysis, scaling-postgresql.
-- [ ] **Step 3:** Route `dispense/[...slug].astro` su `getStaticPaths` + `getCollection('dispense')`, layout `ArticleLayout` con `category` esteso (accetta `'dispensa'`).
-- [ ] **Step 4:** Convertire la Dispensa 00 (regole di conversione; frontmatter dal contratto slug; nell'indice vivo della serie la voce «Sotto Ollama» marcata **pubblicata** con link relativo alla Dispensa 03, le voci Evals/Sicurezza restano in coda).
-- [ ] **Step 5:** Riscrivere `Card.astro` (varianti: dispensa con numero serif `order` a due cifre, standard, ghost non cliccabile «In coda») e `index.astro`: hero tipografico, quattro `.sec-head` nell'ordine Dispense (ordinate per `order`, + ghost) · Fondamenta · Guide tecniche · Analisi puntuali, Search pagefind conservata, rimozione filtri/sort e della vecchia setup-section (i file in `public/setup/` restano serviti).
-- [ ] **Step 6:** Build verde; `dist/dispense/00-la-mappa/index.html` esiste; la home contiene le quattro intestazioni e due card ghost; reveal allo scroll attivo (IntersectionObserver) con classi `.rv/.in` e guardia reduced-motion.
-- [ ] **Step 7:** Commit `feat: add dispense collection, four-section homepage, editorial cards`.
+- [x] **Step 2:** `section` nei 9 articles: fondamenta → ai-developer-paradigm, ai-developer-paradigm-python, engineering-guidelines, hyper-human-manifesto, mindset-shift-ai-developer; analisi → ai-jobs-overview-2026, memory-war-enterprise, welcome-to-the-machine-analysis, scaling-postgresql.
+- [x] **Step 3:** Route `dispense/[...slug].astro` su `getStaticPaths` + `getCollection('dispense')`, layout `ArticleLayout` con `category` esteso (accetta `'dispensa'`).
+- [x] **Step 4:** Convertire la Dispensa 00 (regole di conversione; frontmatter dal contratto slug; nell'indice vivo della serie la voce «Sotto Ollama» marcata **pubblicata** con link relativo alla Dispensa 03, le voci Evals/Sicurezza restano in coda).
+- [x] **Step 5:** Riscrivere `Card.astro` (varianti: dispensa con numero serif `order` a due cifre, standard, ghost non cliccabile «In coda») e `index.astro`: hero tipografico, quattro `.sec-head` nell'ordine Dispense (ordinate per `order`, + ghost) · Fondamenta · Guide tecniche · Analisi puntuali, Search pagefind conservata, rimozione filtri/sort e della vecchia setup-section (i file in `public/setup/` restano serviti).
+- [x] **Step 6:** Build verde; `dist/dispense/00-la-mappa/index.html` esiste; la home contiene le quattro intestazioni e due card ghost; reveal allo scroll attivo (IntersectionObserver) con classi `.rv/.in` e guardia reduced-motion.
+- [x] **Step 7:** Commit `feat: add dispense collection, four-section homepage, editorial cards`.
 
 ### Task 6: Conversione Dispense 01–04
 
 **Files:**
 - Create: `src/content/dispense/01-harness-loop-engineering.mdx`, `02-metodo-operativo.mdx`, `03-sotto-ollama.mdx`, `04-database-vettoriali.mdx`
 
-- [ ] **Step 1:** Convertire i quattro HTML secondo le regole e il contratto slug/frontmatter (una alla volta, build dopo ciascuna se emergono dubbi di schema).
-- [ ] **Step 2:** Grep di neutralità (vincolo globale) su `src/content/dispense/` → vuoto.
-- [ ] **Step 3:** Build verde; le quattro pagine esistono in `dist/dispense/`; la home elenca cinque dispense ordinate.
-- [ ] **Step 4:** Commit `feat: publish Dispense 01-04 (Harness & Loop, Metodo, Sotto Ollama, Database vettoriali)`.
+- [x] **Step 1:** Convertire i quattro HTML secondo le regole e il contratto slug/frontmatter (una alla volta, build dopo ciascuna se emergono dubbi di schema).
+- [x] **Step 2:** Grep di neutralità (vincolo globale) su `src/content/dispense/` → vuoto.
+- [x] **Step 3:** Build verde; le quattro pagine esistono in `dist/dispense/`; la home elenca cinque dispense ordinate.
+- [x] **Step 4:** Commit `feat: publish Dispense 01-04 (Harness & Loop, Metodo, Sotto Ollama, Database vettoriali)`.
 
 ### Task 7: Layout di lettura e componenti
 
@@ -172,17 +172,17 @@ Su `articles`: aggiungere `section: z.enum(['fondamenta', 'analisi'])`, rendere 
 - Modify: `src/layouts/ArticleLayout.astro`
 - Modify: `src/components/{InfoBox,ProsCons,ToolCard,Checklist,ComparisonTable,Quote,StatCard,TimelineItem,StepHeader,CopyCode,ReadingTime,TableOfContents,BackToTop,Search,ProgressBar,VersionBadge,MarketCard}.astro` (solo stile, API invariate)
 
-- [ ] **Step 1:** `ArticleLayout`: occhiello sezione + data, H1 serif, meta con `ReadingTime`, prosa a 68ch, TOC sticky da 1100px; per le dispense: indicatore «Dispensa NN di 04» e navigazione precedente/successiva ordinata per `order` (props `prev`/`next` passate dalla route del Task 5).
-- [ ] **Step 2:** Restyle dei componenti sui token (angoli vivi, filetti, niente ombre; le emoji decorative interne ai componenti si rimuovono).
-- [ ] **Step 3:** Build verde; controllo visivo in dev di una dispensa, un articolo, una guida.
-- [ ] **Step 4:** Commit `feat: restyle reading layout and MDX components`.
+- [x] **Step 1:** `ArticleLayout`: occhiello sezione + data, H1 serif, meta con `ReadingTime`, prosa a 68ch, TOC sticky da 1100px; per le dispense: indicatore «Dispensa NN di 04» e navigazione precedente/successiva ordinata per `order` (props `prev`/`next` passate dalla route del Task 5).
+- [x] **Step 2:** Restyle dei componenti sui token (angoli vivi, filetti, niente ombre; le emoji decorative interne ai componenti si rimuovono).
+- [x] **Step 3:** Build verde; controllo visivo in dev di una dispensa, un articolo, una guida.
+- [x] **Step 4:** Commit `feat: restyle reading layout and MDX components`.
 
 ### Task 8: QA
 
-- [ ] **Step 1:** `npm run build` finale; poi link interni: estrarre gli `href` interni dal `dist/` e verificare che ogni destinazione esista (script one-liner in sessione, non committato).
-- [ ] **Step 2:** Verifica browser su `npm run preview`: home e una dispensa in viewport desktop e mobile (375px), con `prefers-color-scheme: dark` emulato → la pagina resta chiara; con reduced-motion → nessuna animazione.
-- [ ] **Step 3:** Contrasto: `--ink-2` e `--ink-3` su `--paper`/`--panel` ≥ AA per il loro ruolo; pagefind funzionante (ricerca di «ollama» trova la Dispensa 03).
-- [ ] **Step 4:** Fix di quanto emerso; commit `fix: QA pass (links, mobile, contrast)` se ci sono correzioni.
+- [x] **Step 1:** `npm run build` finale; poi link interni: estrarre gli `href` interni dal `dist/` e verificare che ogni destinazione esista (script one-liner in sessione, non committato).
+- [x] **Step 2:** Verifica browser su `npm run preview`: home e una dispensa in viewport desktop e mobile (375px), con `prefers-color-scheme: dark` emulato → la pagina resta chiara; con reduced-motion → nessuna animazione.
+- [x] **Step 3:** Contrasto: `--ink-2` e `--ink-3` su `--paper`/`--panel` ≥ AA per il loro ruolo; pagefind funzionante (ricerca di «ollama» trova la Dispensa 03).
+- [x] **Step 4:** Fix di quanto emerso; commit `fix: QA pass (links, mobile, contrast)` se ci sono correzioni.
 
 ### Task 9: Documentazione e chiusura
 
@@ -190,9 +190,9 @@ Su `articles`: aggiungere `section: z.enum(['fondamenta', 'analisi'])`, rendere 
 - Modify: `CHANGELOG.md` (sezione `[Unreleased]`), `README.md` (se esiste, sezioni visibili), `CLAUDE.md` (nuova collection, sezioni, comandi invariati), `docs/PROGRESS.md` se esiste
 - Modify (repo root Formray): `.claude/docs/PROJECTS.md` («Last session» / «Next priority»)
 
-- [ ] **Step 1:** Aggiornare i documenti di progetto (lingua: PROGRESS in italiano, resto secondo convenzione).
-- [ ] **Step 2:** Commit `docs: update project docs for rilancio agosto 2026`.
-- [ ] **Step 3:** Merge del feature branch in develop, push, PR develop → main con sommario del rilancio (come da flusso del progetto).
+- [x] **Step 1:** Aggiornare i documenti di progetto (lingua: PROGRESS in italiano, resto secondo convenzione).
+- [x] **Step 2:** Commit `docs: update project docs for rilancio agosto 2026`.
+- [x] **Step 3:** Merge del feature branch in develop, push, PR develop → main con sommario del rilancio (come da flusso del progetto).
 
 ## Self-review
 
