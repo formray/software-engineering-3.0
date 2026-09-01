@@ -11,6 +11,7 @@ export default defineConfig({
   redirects: {
     '/articles/claude-code-vs-cursor-comparison': '/software-engineering-3.0/guides/claude-code-vs-cursor-2026',
     '/articles/ai-developer-roadmap-2026': '/software-engineering-3.0/',
+    '/articles/python-fundamentals-to-generative': '/software-engineering-3.0/guides/python-fundamentals-to-generative',
   },
   markdown: {
     shikiConfig: {
