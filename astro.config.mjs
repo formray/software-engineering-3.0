@@ -6,4 +6,9 @@ export default defineConfig({
   integrations: [mdx(), sitemap()],
   site: 'https://formray.github.io',
   base: '/software-engineering-3.0',
+  markdown: {
+    shikiConfig: {
+      theme: 'vesper',
+    },
+  },
 });
