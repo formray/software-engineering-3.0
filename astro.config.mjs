@@ -10,6 +10,7 @@ export default defineConfig({
   // quindi le destinazioni portano il base path esplicito.
   redirects: {
     '/articles/claude-code-vs-cursor-comparison': '/software-engineering-3.0/guides/claude-code-vs-cursor-2026',
+    '/articles/ai-developer-roadmap-2026': '/software-engineering-3.0/',
   },
   markdown: {
     shikiConfig: {
